@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Results — birthday activity ranking</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400&family=Manrope:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --card: #ffffff;
+    --ink: #443c48;
+    --muted: #928a97;
+    --accent: #b06a86;
+    --accent-deep: #935570;
+    --soft: #f4e9ef;
+    --line: #ece5ee;
+    --lift: 0 26px 60px -32px rgba(88, 60, 82, 0.4);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-weight: 300;
+    color: var(--ink);
+    background: linear-gradient(168deg, #fdf5f9 0%, #f4f0fb 52%, #edf4f5 100%);
+    background-attachment: fixed;
+    display: flex;
+    justify-content: center;
+    padding: clamp(24px, 6vw, 52px) clamp(14px, 4vw, 20px) 72px;
+  }
+  .wrap { width: 100%; max-width: 540px; }
+  .eyebrow {
+    margin: 0 0 8px;
+    text-align: center;
+    font-size: clamp(0.95rem, 4vw, 1.1rem);
+    font-weight: 300;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  h1 {
+    font-family: "Fraunces", Georgia, serif;
+    font-weight: 300;
+    font-size: clamp(1.7rem, 6.4vw, 2.2rem);
+    text-align: center;
+    margin: 0 0 6px;
+  }
+  .count { text-align: center; color: var(--muted); font-size: 0.85rem; margin-bottom: 24px; }
+  .panel {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    box-shadow: var(--lift);
+    overflow: hidden;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 14px 16px; text-align: left; border-bottom: 1px solid var(--line); }
+  th {
+    font-size: 0.66rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--muted);
+    font-weight: 400;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td.rank {
+    font-family: "Fraunces", Georgia, serif;
+    font-weight: 400;
+    font-size: 1.1rem;
+    color: var(--muted);
+    width: 2.5rem;
+  }
+  td.activity { font-weight: 400; }
+  tbody tr:first-child td.rank { color: var(--accent); }
+  .keybar {
+    background: var(--card);
+    border: 1px dashed var(--line);
+    border-radius: 16px;
+    padding: 18px 20px;
+    color: var(--muted);
+    font-size: 0.88rem;
+    line-height: 1.55;
+  }
+  .keybar code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: var(--soft);
+    padding: 2px 6px;
+    border-radius: 6px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="eyebrow">Live tally</p>
+  <h1>Results</h1>
+  <div id="keybar"></div>
+  <div class="count" id="count"></div>
+  <div class="panel" id="panelWrap" style="display:none">
+    <table id="table">
+      <thead><tr><th>#</th><th>Activity</th><th>Points</th><th>Avg. rank</th></tr></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+</div>
+<script>
+function getKey() {
+  return new URL(location.href).searchParams.get('key') || '';
+}
+async function load() {
+  const key = getKey();
+  if (!key) {
+    document.getElementById('keybar').innerHTML = '<div class="keybar">Add <code>?key=YOUR_ADMIN_KEY</code> to the URL (see <code>admin_key.txt</code> on the server).</div>';
+    return;
+  }
+  const res = await fetch('/api/results?key=' + encodeURIComponent(key));
+  if (!res.ok) {
+    document.getElementById('keybar').innerHTML = '<div class="keybar">Wrong or missing admin key.</div>';
+    return;
+  }
+  const data = await res.json();
+  document.getElementById('count').textContent = data.totalResponses + ' response(s) so far.';
+  const tbody = document.getElementById('tbody');
+  data.leaderboard.forEach((row, idx) => {
+    const tr = document.createElement('tr');
+    const rank = document.createElement('td'); rank.className = 'rank'; rank.textContent = idx + 1;
+    const act = document.createElement('td'); act.className = 'activity'; act.textContent = row.activity;
+    const pts = document.createElement('td'); pts.textContent = row.points;
+    const avg = document.createElement('td'); avg.textContent = row.averageRank ?? '—';
+    tr.append(rank, act, pts, avg);
+    tbody.appendChild(tr);
+  });
+  document.getElementById('panelWrap').style.display = data.totalResponses ? 'block' : 'none';
+}
+load();
+</script>
+</body>
+</html>

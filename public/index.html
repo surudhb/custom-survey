@@ -1,0 +1,1018 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rank the birthday activities</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400&family=Manrope:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* --card stays pure white in every theme; the JS theme switcher only
+       re-points the tokens below (and the --bg* gradient stops). */
+    --card: #ffffff;
+    --ink: #443c48;
+    --muted: #928a97;
+    --accent: #b06a86;
+    --accent-deep: #935570;
+    --soft: #f4e9ef;
+    --line: #ece5ee;
+    --bg1: #fdf5f9;
+    --bg2: #f4f0fb;
+    --bg3: #edf4f5;
+    --lift: 0 26px 60px -32px rgba(60, 55, 65, 0.38);
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { min-height: 100%; }
+  body {
+    margin: 0;
+    font-family: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-weight: 300;
+    color: var(--ink);
+    background: linear-gradient(168deg, var(--bg1) 0%, var(--bg2) 52%, var(--bg3) 100%);
+    background-attachment: fixed;
+    transition: background 0.4s ease, color 0.4s ease;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: clamp(22px, 6vw, 52px) clamp(14px, 4vw, 20px) clamp(48px, 12vw, 80px);
+  }
+  .invite { width: 100%; max-width: 452px; }
+  .frame {
+    position: relative;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 24px;
+    padding: clamp(26px, 7vw, 40px) clamp(20px, 6vw, 36px) clamp(24px, 6vw, 34px);
+    box-shadow: var(--lift);
+  }
+  .frame::after {
+    content: "";
+    position: absolute;
+    inset: 9px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    pointer-events: none;
+  }
+
+  .eyebrow {
+    margin: 0 0 10px;
+    text-align: center;
+    font-size: clamp(1rem, 4vw, 1.2rem);
+    font-weight: 300;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  h1 {
+    font-family: "Fraunces", Georgia, serif;
+    font-optical-sizing: 144;
+    font-weight: 300;
+    font-size: clamp(1.6rem, 6.4vw, 2.15rem);
+    line-height: 1.16;
+    text-align: center;
+    margin: 0;
+    color: var(--ink);
+  }
+  .date {
+    font-family: "Fraunces", Georgia, serif;
+    font-weight: 300;
+    font-style: italic;
+    text-align: center;
+    color: var(--accent-deep);
+    font-size: clamp(1.15rem, 4.6vw, 1.45rem);
+    margin: 8px 0 0;
+  }
+
+  /* space between the title and the instructions — two overlapping circular photos */
+  .photos {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: clamp(20px, 6vw, 30px) 0 clamp(22px, 6vw, 30px);
+  }
+  .photo {
+    width: clamp(88px, 27vw, 108px);
+    height: clamp(88px, 27vw, 108px);
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid #fff;
+    box-shadow: 0 10px 24px -10px rgba(68, 60, 72, 0.4);
+    background: var(--soft);
+  }
+  .photo--left  { position: relative; z-index: 1; }
+  .photo--right { position: relative; z-index: 2; margin-left: clamp(-48px, -13vw, -38px); }
+
+  p.sub {
+    text-align: center;
+    color: var(--muted);
+    line-height: 1.6;
+    font-size: clamp(0.88rem, 3.6vw, 0.96rem);
+    margin: 0 auto clamp(20px, 6vw, 26px);
+    max-width: 34ch;
+  }
+
+  ol#rank-list { list-style: none; margin: 0; padding: 0; }
+  .rank-item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 15px;
+    padding: 13px 15px;
+    margin-bottom: 10px;
+    cursor: grab;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+    transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.3, 1),
+                box-shadow 0.2s ease, opacity 0.2s ease, border-color 0.2s ease;
+  }
+  .rank-item:hover { border-color: var(--accent); }
+  .rank-item:active { cursor: grabbing; }
+  .rank-item.dragging {
+    transition: box-shadow 0.2s ease;
+    z-index: 10;
+    cursor: grabbing;
+    opacity: 1 !important;
+    border-color: var(--accent);
+    box-shadow: 0 22px 46px -14px rgba(147, 85, 112, 0.45);
+  }
+  body.is-dragging .rank-item:not(.dragging) { opacity: 0.72; }
+  .rank-item.just-dropped { animation: pop 0.4s cubic-bezier(0.2, 0.8, 0.3, 1); }
+  @keyframes pop {
+    0%   { transform: scale(0.965); }
+    45%  { transform: scale(1.03); }
+    100% { transform: scale(1); }
+  }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: none; }
+  }
+  #rank-list[data-intro] .rank-item {
+    animation: rise 0.5s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+    animation-delay: calc(var(--i) * 55ms);
+  }
+
+  .rank-item .handle {
+    flex: 0 0 auto;
+    color: var(--muted);
+    font-size: 1.05rem;
+    letter-spacing: -2px;
+    opacity: 0.6;
+  }
+  .rank-item .badge {
+    flex: 0 0 auto;
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    background: var(--soft);
+    color: var(--accent-deep);
+    font-family: "Fraunces", Georgia, serif;
+    font-size: 1rem;
+    font-weight: 400;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .rank-item .name { flex: 1; font-weight: 400; font-size: clamp(0.92rem, 3.8vw, 1rem); }
+
+  button.primary {
+    width: 100%;
+    margin-top: 6px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    padding: 15px;
+    border-radius: 999px;
+    font-family: inherit;
+    font-size: clamp(0.9rem, 3.6vw, 0.98rem);
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    box-shadow: 0 16px 34px -18px rgba(176, 106, 134, 0.95);
+    transition: background 0.16s ease, transform 0.16s ease;
+  }
+  button.primary:hover { background: var(--accent-deep); transform: translateY(-1px); }
+  button.primary:active { transform: translateY(0); }
+  button.secondary {
+    width: 100%;
+    background: transparent;
+    color: var(--accent-deep);
+    border: 1px solid var(--line);
+    padding: 11px;
+    border-radius: 999px;
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 400;
+    cursor: pointer;
+    margin-top: 8px;
+    transition: border-color 0.16s ease;
+  }
+  button.secondary:hover { border-color: var(--accent); }
+  .status {
+    text-align: center;
+    font-size: 0.82rem;
+    color: var(--muted);
+    margin-top: 12px;
+    min-height: 1.2em;
+  }
+
+  .manage {
+    margin-top: 22px;
+    border-top: 1px dashed var(--line);
+    padding-top: 14px;
+  }
+  .manage summary {
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 0.8rem;
+    text-align: center;
+    list-style: none;
+  }
+  .manage summary::-webkit-details-marker { display: none; }
+  .code-box {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: var(--soft);
+    border: 1px dashed var(--line);
+    border-radius: 10px;
+    padding: 9px 11px;
+    font-size: 0.8rem;
+    word-break: break-all;
+    color: var(--ink);
+  }
+  input[type=text] {
+    width: 100%;
+    padding: 11px;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: var(--card);
+    color: var(--ink);
+    font-family: inherit;
+    font-weight: 300;
+    font-size: 0.85rem;
+    margin: 8px 0;
+  }
+  input[type=text]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .hint { font-size: 0.78rem; color: var(--muted); margin-top: 6px; line-height: 1.55; }
+
+  #thanks-view .primary,
+  #thanks-view .secondary { display: block; }
+
+  #others-panel {
+    margin-top: 16px;
+    border-top: 1px dashed var(--line);
+    padding-top: 14px;
+  }
+  .res-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 2px;
+    font-size: clamp(0.88rem, 3.6vw, 0.96rem);
+  }
+  .res-row + .res-row { border-top: 1px solid var(--line); }
+  .res-row .rank {
+    flex: 0 0 auto;
+    width: 1.4rem;
+    text-align: center;
+    font-family: "Fraunces", Georgia, serif;
+    color: var(--accent-deep);
+  }
+  .res-row .lbl { flex: 0 0 auto; width: 8.5rem; }
+  .res-row .bar {
+    flex: 1;
+    height: 7px;
+    border-radius: 999px;
+    background: var(--soft);
+    overflow: hidden;
+  }
+  .res-row .bar > i {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+    border-radius: 999px;
+    transition: width 0.5s cubic-bezier(0.2, 0.8, 0.3, 1);
+  }
+  .res-count { text-align: center; color: var(--muted); font-size: 0.8rem; margin-top: 12px; }
+
+  /* ---- theme switcher button (top-right, safe-area aware) ---- */
+  #theme-btn {
+    position: fixed;
+    top: max(12px, env(safe-area-inset-top, 0px));
+    right: max(12px, env(safe-area-inset-right, 0px));
+    z-index: 50;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 1px solid var(--line);
+    background: var(--card);
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 8px 22px -10px rgba(40, 35, 45, 0.35);
+    transition: transform 0.2s ease, color 0.3s ease, border-color 0.3s ease;
+  }
+  #theme-btn:hover { transform: rotate(-18deg); }
+  #theme-btn:active { transform: rotate(-18deg) scale(0.92); }
+  #theme-btn svg { width: 22px; height: 22px; display: block; }
+  #theme-name {
+    position: fixed;
+    top: max(62px, calc(env(safe-area-inset-top, 0px) + 50px));
+    right: max(12px, env(safe-area-inset-right, 0px));
+    z-index: 50;
+    background: var(--card);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    font-size: 0.74rem;
+    letter-spacing: 0.04em;
+    padding: 5px 10px;
+    border-radius: 999px;
+    box-shadow: 0 8px 22px -12px rgba(40, 35, 45, 0.35);
+    opacity: 0;
+    transform: translateY(-4px);
+    pointer-events: none;
+    transition: opacity 0.25s ease, transform 0.25s ease;
+  }
+  #theme-name.show { opacity: 1; transform: translateY(0); }
+
+  /* ---- post-deadline drumroll / winner reveal ---- */
+  #drum-stage {
+    display: flex;
+    justify-content: center;
+    margin: clamp(16px, 6vw, 26px) 0 clamp(14px, 4vw, 20px);
+    transition: opacity 0.45s ease, transform 0.45s ease;
+  }
+  #drum-stage.gone {
+    opacity: 0;
+    transform: scale(0.78);
+    height: 0;
+    margin: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  #drum-svg {
+    width: clamp(170px, 56vw, 230px);
+    height: auto;
+    color: var(--accent);
+  }
+  #drum-svg .stick {
+    transition: transform 55ms ease-out;
+    transform-box: fill-box;
+  }
+  #drum-svg .stick-l { transform-origin: 8% 50%; }
+  #drum-svg .stick-r { transform-origin: 92% 50%; }
+  #drum-svg .drum-body { transition: transform 50ms ease-out; }
+
+  .drum-label {
+    display: block;
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.82rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  #drum-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 12px;
+    border-radius: 999px;
+    background: var(--soft);
+    border: 1px solid var(--line);
+    outline: none;
+    margin: 0 0 4px;
+  }
+  #drum-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 3px solid var(--card);
+    box-shadow: 0 4px 12px -3px rgba(40, 35, 45, 0.4);
+    cursor: grab;
+  }
+  #drum-slider::-moz-range-thumb {
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--card);
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: grab;
+  }
+  #drum-slider:disabled::-webkit-slider-thumb { background: var(--muted); cursor: default; }
+  #drum-slider:disabled::-moz-range-thumb { background: var(--muted); cursor: default; }
+
+  #winner { text-align: center; animation: rise 0.6s cubic-bezier(0.2, 0.8, 0.3, 1) both; }
+  .winner-kicker {
+    text-transform: uppercase;
+    letter-spacing: 0.22em;
+    font-size: 0.72rem;
+    color: var(--accent);
+    margin: 6px 0 6px;
+  }
+  #winner-activity {
+    font-family: "Fraunces", Georgia, serif;
+    font-weight: 400;
+    font-size: clamp(1.7rem, 7.5vw, 2.5rem);
+    line-height: 1.12;
+    color: var(--ink);
+    margin: 0 0 12px;
+  }
+  .winner-location { font-size: clamp(0.95rem, 3.8vw, 1.05rem); margin: 3px 0; color: var(--ink); }
+  .winner-address { font-size: 0.85rem; color: var(--muted); margin: 3px auto 4px; max-width: 30ch; }
+  .winner-time { color: var(--muted); font-size: 0.9rem; margin: 2px 0 16px; }
+  .winner-map {
+    display: inline-block;
+    text-decoration: none;
+    color: #fff;
+    background: var(--accent);
+    padding: 12px 22px;
+    border-radius: 999px;
+    font-size: 0.9rem;
+    letter-spacing: 0.03em;
+    transition: background 0.16s ease;
+  }
+  .winner-map:hover { background: var(--accent-deep); }
+
+  .confetti-canvas {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 60;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+</style>
+</head>
+<body>
+<button id="theme-btn" type="button" aria-label="Change colour theme" title="Change colour theme">
+  <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M12 4.5a1 1 0 0 1-1-1v-1a1 1 0 1 1 2 0v1a1 1 0 0 1-1 1Zm-6.01 2.49-.7-.71a1 1 0 0 1 1.41-1.41l.71.7A1 1 0 0 1 5.99 6.99ZM4.5 12a1 1 0 0 1-1 1h-1a1 1 0 1 1 0-2h1a1 1 0 0 1 1 1Zm1.49 6.01a1 1 0 0 1-1.41-1.41l.7-.71a1 1 0 1 1 1.42 1.42l-.71.7ZM12 21.5a1 1 0 0 1-1-1v-1a1 1 0 1 1 2 0v1a1 1 0 0 1-1 1Z"/>
+    <path d="M12 7a5 5 0 1 0 4.9 6 4 4 0 0 1-4.9-6Z"/>
+  </svg>
+</button>
+<div id="theme-name" aria-live="polite"></div>
+<main class="invite">
+  <div class="frame">
+   <section id="vote-view">
+    <p class="eyebrow">You're invited</p>
+    <h1 id="title">Loading…</h1>
+    <p class="date"></p>
+
+    <div class="photos">
+      <!-- Placeholder photos — replace the src of each with the real image later. -->
+      <img class="photo photo--left" alt="" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23f2e7ee'/%3E%3Ccircle cx='50' cy='40' r='15' fill='%23d3bccb'/%3E%3Cpath d='M23 84c0-16 12-27 27-27s27 11 27 27z' fill='%23d3bccb'/%3E%3C/svg%3E">
+      <img class="photo photo--right" alt="" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23e9edf6'/%3E%3Ccircle cx='50' cy='40' r='15' fill='%23bcc6d8'/%3E%3Cpath d='M23 84c0-16 12-27 27-27s27 11 27 27z' fill='%23bcc6d8'/%3E%3C/svg%3E">
+    </div>
+
+    <p class="sub" id="description"></p>
+
+    <ol id="rank-list"></ol>
+    <button class="primary" id="submit-btn">Submit my ranking</button>
+    <div class="status" id="status"></div>
+
+    <details class="manage">
+      <summary>Already voted? Edit or move it to another device</summary>
+      <p class="hint">This page remembers you only through the private code below, kept in this browser. Submitting again just overwrites your previous entry.</p>
+      <div class="hint">Your code (save it to edit from another device):</div>
+      <div class="code-box" id="my-code">—</div>
+      <input type="text" id="load-code" placeholder="Paste a code to load that response">
+      <button class="secondary" id="load-btn">Load response</button>
+      <button class="secondary" id="clear-btn">Delete my response</button>
+    </details>
+   </section>
+
+   <section id="thanks-view" hidden>
+    <p class="eyebrow">Thank you</p>
+    <h1>You're on the list</h1>
+    <p class="date"></p>
+
+    <div class="photos">
+      <img class="photo photo--left" alt="" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23f2e7ee'/%3E%3Ccircle cx='50' cy='40' r='15' fill='%23d3bccb'/%3E%3Cpath d='M23 84c0-16 12-27 27-27s27 11 27 27z' fill='%23d3bccb'/%3E%3C/svg%3E">
+      <img class="photo photo--right" alt="" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23e9edf6'/%3E%3Ccircle cx='50' cy='40' r='15' fill='%23bcc6d8'/%3E%3Cpath d='M23 84c0-16 12-27 27-27s27 11 27 27z' fill='%23bcc6d8'/%3E%3C/svg%3E">
+    </div>
+
+    <p class="sub">Your ranking is saved. You can come back and change it any time before the day.</p>
+
+    <button class="primary" id="more-confetti-btn">More confetti</button>
+    <button class="secondary" id="edit-btn">View or edit your response</button>
+    <button class="secondary" id="others-btn">See what others picked</button>
+
+    <div id="others-panel" hidden></div>
+   </section>
+
+   <section id="reveal-view" hidden>
+    <p class="eyebrow">The verdict</p>
+    <h1>Drumroll, please</h1>
+    <p class="date"></p>
+
+    <div id="drum-stage">
+      <svg id="drum-svg" viewBox="0 0 220 150" role="img" aria-label="A drum with a drumstick on each side">
+        <g class="drum-body">
+          <ellipse cx="110" cy="118" rx="46" ry="13" fill="var(--soft)" stroke="currentColor" stroke-width="2.5"/>
+          <path d="M64 55 V118 M156 55 V118" fill="none" stroke="currentColor" stroke-width="2.5"/>
+          <path d="M64 118 A46 13 0 0 0 156 118 L156 55 A46 13 0 0 1 64 55 Z" fill="var(--card)" stroke="currentColor" stroke-width="2.5"/>
+          <ellipse cx="110" cy="55" rx="46" ry="13" fill="var(--card)" stroke="currentColor" stroke-width="2.5"/>
+          <path d="M66 60 L150 108 M154 60 L70 108 M110 47 L110 126" stroke="currentColor" stroke-width="1.6" opacity="0.5"/>
+        </g>
+        <g class="stick stick-l">
+          <rect x="6" y="70" width="66" height="8" rx="4" fill="currentColor"/>
+          <circle cx="72" cy="74" r="8" fill="currentColor"/>
+        </g>
+        <g class="stick stick-r">
+          <rect x="148" y="70" width="66" height="8" rx="4" fill="currentColor"/>
+          <circle cx="148" cy="74" r="8" fill="currentColor"/>
+        </g>
+      </svg>
+    </div>
+
+    <label class="drum-label" for="drum-slider">Slide to drumroll</label>
+    <input type="range" id="drum-slider" min="0" max="100" value="0" step="1" aria-label="Slide to drumroll">
+
+    <div id="winner" hidden>
+      <p class="winner-kicker">And the winner is</p>
+      <h2 id="winner-activity"></h2>
+      <p id="winner-location" class="winner-location"></p>
+      <p id="winner-address" class="winner-address"></p>
+      <p id="winner-time" class="winner-time"></p>
+      <a id="winner-map" class="winner-map" target="_blank" rel="noopener noreferrer">Open in Google Maps →</a>
+    </div>
+   </section>
+  </div>
+</main>
+
+<script>
+const statusEl = document.getElementById('status');
+const listEl = document.getElementById('rank-list');
+let activities = [];
+let currentOrder = [];
+
+/* ---- colour themes (all light; --card stays white; backgrounds stay gradient) ---- */
+const THEMES = [
+  { name: 'Rosé',          ink: '#443c48', muted: '#928a97', accent: '#b06a86', deep: '#935570', soft: '#f4e9ef', line: '#ece5ee', bg: ['#fdf5f9', '#f4f0fb', '#edf4f5'], confetti: ['#b06a86', '#e8b7c8', '#c9b8e0', '#935570', '#f2d5a0', '#a8c8b0'] },
+  { name: 'Citrus Grove',  ink: '#3d4030', muted: '#8a8c73', accent: '#7a9b34', deep: '#5f7c26', soft: '#eef4dd', line: '#e7edd4', bg: ['#fdfbe6', '#f2f7df', '#e7f4ea'], confetti: ['#7a9b34', '#c6da86', '#eccb5c', '#5f7c26', '#a9cf9a', '#f0e2a0'] },
+  { name: 'Seaside',       ink: '#334247', muted: '#7f9095', accent: '#2f8f9d', deep: '#236e7a', soft: '#e4f3f5', line: '#dcebed', bg: ['#edf9fb', '#e5f0fb', '#eefbf5'], confetti: ['#2f8f9d', '#8fd0d8', '#f2c879', '#236e7a', '#a7cfe6', '#bfe6d5'] },
+  { name: 'Lavender Haze', ink: '#403c4c', muted: '#8d889b', accent: '#7c6bb0', deep: '#5f5192', soft: '#efeafb', line: '#e7e2f4', bg: ['#f6f2fc', '#efeafb', '#f5eff9'], confetti: ['#7c6bb0', '#c3b7e6', '#e7b7d3', '#5f5192', '#a7c0e6', '#f0d7a0'] },
+  { name: 'Peach Sorbet',  ink: '#4a3d38', muted: '#988a82', accent: '#e07a55', deep: '#bd5c3c', soft: '#fdeae0', line: '#f6e3d7', bg: ['#fff2ec', '#ffe9e0', '#fdf2e6'], confetti: ['#e07a55', '#f4b79b', '#efc96a', '#bd5c3c', '#e6a7a7', '#c9d9a8'] },
+  { name: 'Sage & Stone',  ink: '#3c433c', muted: '#868f86', accent: '#6f8f76', deep: '#54725b', soft: '#eaf1e9', line: '#e2e9e0', bg: ['#f2f6f1', '#edf2ec', '#f4f2e9'], confetti: ['#6f8f76', '#b6cdb3', '#e6cf94', '#54725b', '#a7bfd0', '#dcc9b0'] },
+  { name: 'Cornflower',    ink: '#3a3f4c', muted: '#868a99', accent: '#5b74c4', deep: '#45599e', soft: '#e9edfb', line: '#e1e6f5', bg: ['#eef1fd', '#e8edfb', '#f0f3fd'], confetti: ['#5b74c4', '#a9b8e8', '#e8b7c8', '#45599e', '#a7d0c0', '#f0dca0'] },
+  { name: 'Terracotta',    ink: '#443b34', muted: '#928779', accent: '#c2542f', deep: '#9c4023', soft: '#f4e7de', line: '#ece0d3', bg: ['#fdf6ee', '#f7efe1', '#f3eee3'], confetti: ['#c2542f', '#e6a07d', '#e8c56a', '#9c4023', '#a8b98f', '#e0c4a0'] },
+  { name: 'Berry Fizz',    ink: '#463841', muted: '#978a93', accent: '#c0417a', deep: '#9c2f61', soft: '#f9e6f0', line: '#f0dce8', bg: ['#fdeef5', '#fbe7f0', '#f6eefa'], confetti: ['#c0417a', '#e8a0c4', '#e6c56a', '#9c2f61', '#b7a7e6', '#c9d9a8'] },
+  { name: 'Golden Hour',   ink: '#453f30', muted: '#928a74', accent: '#b8862f', deep: '#946824', soft: '#f6ecd6', line: '#ede3cd', bg: ['#fef8e9', '#faf1da', '#f6efdf'], confetti: ['#b8862f', '#e6c877', '#e0a35c', '#946824', '#a8bf9a', '#d9c2a8'] },
+  { name: 'Mint Julep',    ink: '#354340', muted: '#7f918c', accent: '#3f9e7c', deep: '#2f7c61', soft: '#e4f4ec', line: '#dcece3', bg: ['#ecf9f1', '#e4f4ec', '#eefaf3'], confetti: ['#3f9e7c', '#98d6b9', '#f0cf83', '#2f7c61', '#a7c8e0', '#e6c9b0'] },
+  { name: 'Slate Ink',     ink: '#3a4149', muted: '#828b93', accent: '#556f8a', deep: '#41576e', soft: '#e9eef2', line: '#e1e7ec', bg: ['#f0f3f6', '#e9eef2', '#f2f5f7'], confetti: ['#556f8a', '#a7bccb', '#e0b98f', '#41576e', '#a7cfc0', '#e6cfa0'] },
+];
+let activeConfetti = THEMES[0].confetti;
+let themeIdx = 0;
+
+function applyTheme(i, announce) {
+  themeIdx = ((i % THEMES.length) + THEMES.length) % THEMES.length;
+  const t = THEMES[themeIdx];
+  const r = document.documentElement.style;
+  r.setProperty('--ink', t.ink);
+  r.setProperty('--muted', t.muted);
+  r.setProperty('--accent', t.accent);
+  r.setProperty('--accent-deep', t.deep);
+  r.setProperty('--soft', t.soft);
+  r.setProperty('--line', t.line);
+  r.setProperty('--bg1', t.bg[0]);
+  r.setProperty('--bg2', t.bg[1]);
+  r.setProperty('--bg3', t.bg[2]);
+  activeConfetti = t.confetti;
+  try { localStorage.setItem('ranker_theme', String(themeIdx)); } catch {}
+  if (announce) {
+    const tag = document.getElementById('theme-name');
+    tag.textContent = t.name;
+    tag.classList.add('show');
+    clearTimeout(applyTheme._t);
+    applyTheme._t = setTimeout(() => tag.classList.remove('show'), 1400);
+  }
+}
+(function initTheme() {
+  let saved = 0;
+  try { saved = parseInt(localStorage.getItem('ranker_theme'), 10) || 0; } catch {}
+  applyTheme(saved, false);
+})();
+document.getElementById('theme-btn').addEventListener('click', () => applyTheme(themeIdx + 1, true));
+
+function getToken() {
+  let t = localStorage.getItem('ranker_token');
+  if (!t) {
+    t = crypto.randomUUID ? crypto.randomUUID() : (Date.now() + '-' + Math.random().toString(36).slice(2));
+    localStorage.setItem('ranker_token', t);
+  }
+  return t;
+}
+function setToken(t) {
+  localStorage.setItem('ranker_token', t);
+  document.getElementById('my-code').textContent = t;
+}
+
+function renderList(order) {
+  currentOrder = order.slice();
+  listEl.innerHTML = '';
+  order.forEach((activity, idx) => {
+    const li = document.createElement('li');
+    li.className = 'rank-item';
+    li.dataset.activity = activity;
+    li.style.setProperty('--i', idx);
+    li.innerHTML = `
+      <span class="handle" aria-hidden="true">⠿</span>
+      <span class="badge">${idx + 1}</span>
+      <span class="name"></span>`;
+    li.querySelector('.name').textContent = activity;
+    listEl.appendChild(li);
+  });
+}
+
+/* ---- pointer-based drag reordering (works with mouse + touch) ---- */
+let drag = null;
+
+listEl.addEventListener('pointerdown', (e) => {
+  const li = e.target.closest('.rank-item');
+  if (!li) return;
+  if (drag) { // clean up a previous drag whose pointerup was lost
+    drag.items.forEach((it) => { it.style.transform = ''; });
+    drag.li.classList.remove('dragging');
+    document.body.classList.remove('is-dragging');
+    drag = null;
+  }
+  const items = [...listEl.children];
+  const step = items[1]
+    ? items[1].getBoundingClientRect().top - items[0].getBoundingClientRect().top
+    : li.offsetHeight + 10;
+  drag = {
+    li, items, step,
+    pointerId: e.pointerId,
+    startIndex: items.indexOf(li),
+    curIndex: items.indexOf(li),
+    startY: e.clientY,
+    active: false,
+  };
+  try { li.setPointerCapture(e.pointerId); } catch {}
+});
+
+listEl.addEventListener('pointermove', (e) => {
+  if (!drag || e.pointerId !== drag.pointerId) return;
+  const dy = e.clientY - drag.startY;
+  if (!drag.active) {
+    if (Math.abs(dy) < 4) return;
+    drag.active = true;
+    drag.li.classList.add('dragging');
+    document.body.classList.add('is-dragging');
+  }
+  e.preventDefault();
+  drag.li.style.transform = `translateY(${dy}px) scale(1.035) rotate(-1.2deg)`;
+  let idx = drag.startIndex + Math.round(dy / drag.step);
+  idx = Math.max(0, Math.min(drag.items.length - 1, idx));
+  if (idx !== drag.curIndex) {
+    drag.curIndex = idx;
+    layoutGaps();
+  }
+}, { passive: false });
+
+function layoutGaps() {
+  const { items, startIndex, curIndex, step, li } = drag;
+  items.forEach((item, i) => {
+    if (item === li) return;
+    let shift = 0;
+    if (startIndex < curIndex && i > startIndex && i <= curIndex) shift = -step;
+    else if (startIndex > curIndex && i >= curIndex && i < startIndex) shift = step;
+    item.style.transform = shift ? `translateY(${shift}px)` : '';
+  });
+}
+
+function endDrag(e) {
+  if (!drag || (e && e.pointerId !== drag.pointerId)) return;
+  const { li, items, startIndex, curIndex, active } = drag;
+  items.forEach((item) => { item.style.transform = ''; });
+  li.classList.remove('dragging');
+  document.body.classList.remove('is-dragging');
+  drag = null;
+
+  if (!active || startIndex === curIndex) return;
+  const order = currentOrder.slice();
+  const [moved] = order.splice(startIndex, 1);
+  order.splice(curIndex, 0, moved);
+  renderList(order);
+  const movedEl = [...listEl.children].find((el) => el.dataset.activity === moved);
+  if (movedEl) {
+    movedEl.classList.add('just-dropped');
+    setTimeout(() => movedEl.classList.remove('just-dropped'), 420);
+  }
+}
+listEl.addEventListener('pointerup', endDrag);
+listEl.addEventListener('pointercancel', endDrag);
+
+/* ---- confetti burst (optional origin x/y in viewport pixels) ---- */
+function confettiBurst(ox, oy) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const canvas = document.createElement('canvas');
+  canvas.className = 'confetti-canvas';
+  document.body.appendChild(canvas);
+  const ctx = canvas.getContext('2d');
+  let W, H;
+  const resize = () => { W = canvas.width = innerWidth; H = canvas.height = innerHeight; };
+  resize();
+  addEventListener('resize', resize);
+  const cx = ox == null ? W / 2 : ox;
+  const cy = oy == null ? H * 0.34 : oy;
+  const colors = activeConfetti;
+  const parts = Array.from({ length: 150 }, () => ({
+    x: cx + (Math.random() - 0.5) * 140,
+    y: cy + (Math.random() - 0.5) * 40,
+    r: 4 + Math.random() * 6,
+    c: colors[Math.random() * colors.length | 0],
+    vx: (Math.random() - 0.5) * 11,
+    vy: -7 - Math.random() * 9,
+    rot: Math.random() * Math.PI,
+    vr: (Math.random() - 0.5) * 0.32,
+    rect: Math.random() < 0.5,
+  }));
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(34, now - last) / 16;
+    last = now;
+    ctx.clearRect(0, 0, W, H);
+    let alive = false;
+    for (const p of parts) {
+      p.vy += 0.24 * dt;
+      p.vx *= 0.992;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.rot += p.vr * dt;
+      if (p.y < H + 40) alive = true;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot);
+      ctx.fillStyle = p.c;
+      if (p.rect) ctx.fillRect(-p.r / 2, -p.r / 2, p.r, p.r * 1.6);
+      else { ctx.beginPath(); ctx.arc(0, 0, p.r / 1.5, 0, 7); ctx.fill(); }
+      ctx.restore();
+    }
+    if (alive) requestAnimationFrame(frame);
+    else { removeEventListener('resize', resize); canvas.remove(); }
+  }
+  requestAnimationFrame(frame);
+}
+
+const voteView = document.getElementById('vote-view');
+const thanksView = document.getElementById('thanks-view');
+function showThanks() {
+  voteView.hidden = true;
+  thanksView.hidden = false;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+function showVote() {
+  thanksView.hidden = true;
+  voteView.hidden = false;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+let appConfig = null;
+const revealView = document.getElementById('reveal-view');
+
+function submissionsClosed() {
+  if (!appConfig || !appConfig.submissionsCloseAt) return false;
+  const close = new Date(appConfig.submissionsCloseAt); // no timezone => each visitor's local time
+  return !isNaN(close.getTime()) && Date.now() > close.getTime();
+}
+
+async function init() {
+  appConfig = await fetch('/api/config').then((r) => r.json());
+  activities = appConfig.activities;
+  document.getElementById('title').textContent = appConfig.title;
+  document.getElementById('description').textContent = appConfig.description;
+  if (appConfig.dateLabel) {
+    document.querySelectorAll('.date').forEach((el) => { el.textContent = appConfig.dateLabel; });
+  }
+
+  const token = getToken();
+  document.getElementById('my-code').textContent = token;
+
+  let order = activities.slice();
+  let alreadyVoted = false;
+  try {
+    const existing = await fetch('/api/vote/' + encodeURIComponent(token)).then((r) => (r.ok ? r.json() : null));
+    if (existing && existing.ranking) {
+      order = existing.ranking;
+      alreadyVoted = true;
+    }
+  } catch {}
+  renderList(order);
+
+  if (submissionsClosed()) {
+    voteView.hidden = true;
+    thanksView.hidden = true;
+    revealView.hidden = false;
+    return;
+  }
+
+  listEl.setAttribute('data-intro', '');
+  setTimeout(() => listEl.removeAttribute('data-intro'), 1200);
+  if (alreadyVoted) showThanks();
+}
+
+document.getElementById('submit-btn').addEventListener('click', async () => {
+  confettiBurst();
+  const token = getToken();
+  statusEl.textContent = 'Submitting…';
+  const res = await fetch('/api/vote', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, ranking: currentOrder }),
+  });
+  if (res.ok) {
+    statusEl.textContent = '';
+    showThanks();
+  } else {
+    statusEl.textContent = 'Something went wrong — please try again.';
+  }
+});
+
+/* ---- thank-you view actions ---- */
+const confettiSpots = [[0.15, 0.24], [0.85, 0.24], [0.5, 0.12], [0.22, 0.6], [0.8, 0.58], [0.5, 0.44]];
+let confettiIdx = 0;
+document.getElementById('more-confetti-btn').addEventListener('click', () => {
+  const [fx, fy] = confettiSpots[confettiIdx++ % confettiSpots.length];
+  confettiBurst(
+    innerWidth * fx + (Math.random() - 0.5) * 90,
+    innerHeight * fy + (Math.random() - 0.5) * 70,
+  );
+});
+
+document.getElementById('edit-btn').addEventListener('click', showVote);
+
+const othersBtn = document.getElementById('others-btn');
+const othersPanel = document.getElementById('others-panel');
+othersBtn.addEventListener('click', async () => {
+  if (!othersPanel.hidden) {
+    othersPanel.hidden = true;
+    othersBtn.textContent = 'See what others picked';
+    return;
+  }
+  othersBtn.textContent = 'Loading…';
+  try {
+    const s = await fetch('/api/summary').then((r) => r.json());
+    const max = Math.max(1, ...s.leaderboard.map((r) => r.points));
+    othersPanel.innerHTML = s.leaderboard
+      .map((r, i) => `
+        <div class="res-row">
+          <span class="rank">${i + 1}</span>
+          <span class="lbl"></span>
+          <span class="bar"><i style="width:${Math.round((r.points / max) * 100)}%"></i></span>
+        </div>`)
+      .join('') +
+      `<div class="res-count">${s.totalResponses} response${s.totalResponses === 1 ? '' : 's'} so far</div>`;
+    [...othersPanel.querySelectorAll('.res-row .lbl')].forEach((el, i) => {
+      el.textContent = s.leaderboard[i].activity;
+    });
+  } catch {
+    othersPanel.innerHTML = '<div class="res-count">Could not load results — try again.</div>';
+  }
+  othersPanel.hidden = false;
+  othersBtn.textContent = 'Hide results';
+});
+
+document.getElementById('load-btn').addEventListener('click', async () => {
+  const code = document.getElementById('load-code').value.trim();
+  if (!code) return;
+  const res = await fetch('/api/vote/' + encodeURIComponent(code));
+  if (!res.ok) {
+    statusEl.textContent = 'No response found for that code.';
+    return;
+  }
+  const data = await res.json();
+  setToken(code);
+  renderList(data.ranking);
+  statusEl.textContent = 'Loaded. Editing will overwrite this response.';
+});
+
+document.getElementById('clear-btn').addEventListener('click', async () => {
+  const token = getToken();
+  await fetch('/api/vote/' + encodeURIComponent(token), { method: 'DELETE' });
+  renderList(activities.slice());
+  statusEl.textContent = 'Your response was deleted.';
+});
+
+/* ---- drumroll → winner reveal (post-deadline view) ---- */
+(function setupDrumroll() {
+  const svg = document.getElementById('drum-svg');
+  const stage = document.getElementById('drum-stage');
+  const slider = document.getElementById('drum-slider');
+  const stickL = svg.querySelector('.stick-l');
+  const stickR = svg.querySelector('.stick-r');
+  const drumBody = svg.querySelector('.drum-body');
+  let raf = null;
+  let lastHit = 0;
+  let lastInput = 0;
+  let phase = 0;
+  let revealed = false;
+
+  function hit(right) {
+    if (right) {
+      stickR.style.transform = 'rotate(22deg)';
+      stickL.style.transform = 'rotate(0deg)';
+    } else {
+      stickL.style.transform = 'rotate(-22deg)';
+      stickR.style.transform = 'rotate(0deg)';
+    }
+    drumBody.style.transform = `translateY(${right ? 2 : -2}px)`;
+  }
+  function rest() {
+    stickL.style.transform = 'rotate(0deg)';
+    stickR.style.transform = 'rotate(0deg)';
+    drumBody.style.transform = '';
+  }
+
+  function loop(now) {
+    const v = +slider.value;
+    if (v >= 100) { finish(); return; }
+    if (now - lastInput > 1500) { rest(); raf = null; return; } // paused — let the sticks settle
+    // hit interval shrinks as the slider advances: ~430ms → ~45ms
+    const interval = v <= 1 ? 1e9 : 430 - (v / 100) * 385;
+    if (now - lastHit >= interval) { lastHit = now; phase ^= 1; hit(phase); }
+    raf = requestAnimationFrame(loop);
+  }
+  function start() {
+    lastInput = performance.now();
+    if (raf || revealed) return;
+    lastHit = 0;
+    raf = requestAnimationFrame(loop);
+  }
+
+  async function finish() {
+    if (revealed) return;
+    revealed = true;
+    if (raf) cancelAnimationFrame(raf);
+    raf = null;
+    slider.value = 100;
+    slider.disabled = true;
+    rest();
+    stage.classList.add('gone');
+    confettiBurst();
+    setTimeout(() => confettiBurst(innerWidth * 0.22, innerHeight * 0.3), 140);
+    setTimeout(() => confettiBurst(innerWidth * 0.78, innerHeight * 0.32), 280);
+    await showWinner();
+  }
+
+  async function showWinner() {
+    const wrap = document.getElementById('winner');
+    const ev = (appConfig && appConfig.event) || {};
+    let activity = null;
+    try {
+      const s = await fetch('/api/summary').then((r) => r.json());
+      if (s.totalResponses > 0 && s.leaderboard[0].points > 0) activity = s.leaderboard[0].activity;
+    } catch {}
+
+    document.querySelector('#reveal-view h1').textContent = 'The results are in';
+    document.querySelector('#reveal-view .drum-label').hidden = true;
+    slider.hidden = true;
+
+    const actEl = document.getElementById('winner-activity');
+    const locEl = document.getElementById('winner-location');
+    const addrEl = document.getElementById('winner-address');
+    const timeEl = document.getElementById('winner-time');
+    const mapEl = document.getElementById('winner-map');
+
+    if (!activity) {
+      actEl.textContent = 'No votes came in';
+      locEl.textContent = 'Pick something fun together on the day!';
+      addrEl.hidden = true;
+      timeEl.hidden = true;
+      mapEl.hidden = true;
+      wrap.hidden = false;
+      return;
+    }
+
+    const venue = (ev.venues && ev.venues[activity]) || {};
+    actEl.textContent = activity;
+    if (venue.location) locEl.textContent = venue.location; else locEl.hidden = true;
+    if (venue.address) addrEl.textContent = venue.address; else addrEl.hidden = true;
+    if (ev.time) timeEl.textContent = ev.time; else timeEl.hidden = true;
+    mapEl.href = venue.mapsUrl
+      || 'https://www.google.com/maps/search/?api=1&query=' +
+         encodeURIComponent(venue.address || venue.location || activity);
+
+    wrap.hidden = false;
+  }
+
+  slider.addEventListener('input', start);
+  slider.addEventListener('change', () => { if (+slider.value >= 100) finish(); });
+})();
+
+init();
+</script>
+</body>
+</html>

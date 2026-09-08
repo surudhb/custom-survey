@@ -1,0 +1,13 @@
+node_modules/
+*.log
+
+# runtime state — never commit responses or the admin key
+data/
+data.json
+admin_key.txt
+
+# local, non-public event config (keep your real names/dates/venues out of git)
+config.real.json
+config.local.json
+
+.DS_Store

@@ -1,0 +1,6 @@
+node_modules
+npm-debug.log
+data.json
+admin_key.txt
+.git
+.DS_Store

@@ -1,0 +1,49 @@
+{
+  "title": "Alex's Birthday Bash — Vote for the Plan",
+  "description": "Drag to rank every option from your favorite (top) to least favorite (bottom).",
+  "dateLabel": "March 15",
+  "activities": [
+    "Escape room",
+    "Bowling",
+    "Karaoke night",
+    "Mini golf",
+    "Paint & sip studio",
+    "Arcade bar"
+  ],
+  "submissionsCloseAt": "2027-03-14T23:59:59",
+  "event": {
+    "time": "Saturday, March 15, 2027 · 7:30 PM",
+    "venues": {
+      "Escape room": {
+        "location": "The Vault Escape Rooms",
+        "address": "218 Cedar Ave, Rivertown, OR 97000",
+        "mapsUrl": ""
+      },
+      "Bowling": {
+        "location": "Meadowlark Lanes",
+        "address": "1400 Powell Blvd, Rivertown, OR 97000",
+        "mapsUrl": ""
+      },
+      "Karaoke night": {
+        "location": "Songbird Karaoke Lounge",
+        "address": "734 1st Ave, Rivertown, OR 97000",
+        "mapsUrl": ""
+      },
+      "Mini golf": {
+        "location": "Glowing Greens Mini Golf",
+        "address": "509 Taylor St, Rivertown, OR 97000",
+        "mapsUrl": ""
+      },
+      "Paint & sip studio": {
+        "location": "Canvas & Cork Studio",
+        "address": "915 21st Ave, Rivertown, OR 97000",
+        "mapsUrl": ""
+      },
+      "Arcade bar": {
+        "location": "Quarterback Arcade Bar",
+        "address": "115 5th Ave, Rivertown, OR 97000",
+        "mapsUrl": ""
+      }
+    }
+  }
+}
