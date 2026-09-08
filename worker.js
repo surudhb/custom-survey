@@ -1,19 +1,38 @@
 // Cloudflare Workers entry point.
 //
 // Static files in public/ are served by the platform (see [assets] in
-// wrangler.toml); this Worker only handles the JSON API. config.json is
-// bundled at build time, so changing it means a redeploy.
+// wrangler.toml); this Worker only handles the JSON API.
+//
+// Config is injected at runtime: set the `CONFIG` secret to your real event
+// config (the full config.json contents, as one JSON string) with
+//   npx wrangler secret put CONFIG
+// so real names / dates / venues never have to be committed. If `CONFIG` is
+// unset, the bundled (demo) config.json is used.
+//
+// `ADMIN_KEY` (gates /api/results) is likewise a secret, never committed.
 import { createApp } from './src/app.js';
 import { KvStore } from './src/store-kv.js';
-import config from './config.json';
+import { loadConfig } from './src/config.js';
+import bundledConfig from './config.json';
 
 let app;
+
+function resolveConfig(env) {
+  if (env.CONFIG) {
+    try {
+      return loadConfig(env.CONFIG);
+    } catch (e) {
+      console.warn(`CONFIG secret invalid, falling back to bundled config: ${e.message}`);
+    }
+  }
+  return loadConfig(bundledConfig);
+}
 
 export default {
   fetch(request, env, ctx) {
     if (!app) {
       app = createApp({
-        config,
+        config: resolveConfig(env),
         store: new KvStore(env.SURVEY_KV),
         getAdminKey: async () => env.ADMIN_KEY || null,
       });

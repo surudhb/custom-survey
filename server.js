@@ -12,6 +12,7 @@ import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
 import { createApp } from './src/app.js';
 import { FileStore } from './src/store-file.js';
+import { loadConfig } from './src/config.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
@@ -23,9 +24,22 @@ const ADMIN_KEY_FILE = path.join(DATA_DIR, 'admin_key.txt');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
 // ---- config ----
-const config = JSON.parse(fs.readFileSync(path.join(__dirname, 'config.json'), 'utf8'));
-if (!Array.isArray(config.activities) || config.activities.length < 2) {
-  console.error('config.json must have at least 2 activities.');
+// Resolution order (real event details never need to be committed):
+//   1. process.env.CONFIG        — full config as a JSON string (injected)
+//   2. config.real.json          — git-ignored local override
+//   3. config.json               — the committed demo config
+let config;
+try {
+  const realFile = path.join(__dirname, 'config.real.json');
+  if (process.env.CONFIG) {
+    config = loadConfig(process.env.CONFIG);
+  } else if (fs.existsSync(realFile)) {
+    config = loadConfig(fs.readFileSync(realFile, 'utf8'));
+  } else {
+    config = loadConfig(fs.readFileSync(path.join(__dirname, 'config.json'), 'utf8'));
+  }
+} catch (e) {
+  console.error(`Invalid config: ${e.message}`);
   process.exit(1);
 }
 

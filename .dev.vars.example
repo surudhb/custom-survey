@@ -1,0 +1,10 @@
+# Copy to `.dev.vars` (git-ignored) to feed secrets to `npm run dev` (wrangler dev).
+# In production these are set with `npx wrangler secret put <NAME>` instead —
+# nothing here is ever committed.
+
+# Gates GET /api/results?key=...  — pick any value for local use.
+ADMIN_KEY=local-dev-admin-key
+
+# Optional: your real event config as ONE line of JSON. Omit to use the
+# committed demo config.json. Example:
+# CONFIG={"title":"…","description":"…","dateLabel":"…","activities":["…","…"],"submissionsCloseAt":"2026-09-23T23:59:59","event":{"time":"…","venues":{}}}

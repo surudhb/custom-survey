@@ -79,13 +79,28 @@ Everything lives in [`config.json`](config.json):
 | `event.time` | Full date/time shown on the winner screen |
 | `event.venues` | Per-activity `{ location, address, mapsUrl }`. Only the winner's is shown; if `mapsUrl` is blank a Google Maps search link is built from the address |
 
+`event.*` (venue names, addresses, time) is **not** served by `/api/config`
+until `submissionsCloseAt` has passed — it's only needed for the winner reveal.
+
 The two photos on the form are placeholders — replace the `src` of
 `.photo--left` / `.photo--right` in [`public/index.html`](public/index.html) with
 real images (or `data:` URIs).
 
-Keeping real names/dates/venues out of git: put them in `config.real.json`
-(git-ignored) and `cp config.real.json config.json` before you deploy. On
-Workers, `config.json` is bundled at build time, so changing it = redeploy.
+### Keeping real event details out of git (public repo)
+
+The committed `config.json` is a made-up demo. Your real config is resolved at
+run time, so it never has to be committed:
+
+| Where | How |
+| --- | --- |
+| Node (`npm start`) | `CONFIG` env var (JSON string) → else `config.real.json` (git-ignored) → else `config.json` |
+| `wrangler dev` | `CONFIG` in `.dev.vars` (git-ignored; see `.dev.vars.example`) |
+| Cloudflare Workers | `npx wrangler secret put CONFIG` — paste the whole config as one line of JSON |
+
+Secrets (`ADMIN_KEY`, `CONFIG`) are only ever set via env vars / `wrangler
+secret` / `.dev.vars` — never written to a tracked file. The KV namespace `id`
+in `wrangler.toml` is **not** a secret (it's a resource handle, useless without
+an account-scoped API token) and is meant to be committed.
 
 ## Deploy — Cloudflare Workers (free, no card, `git push` to ship)
 
@@ -102,9 +117,10 @@ click-by-click setup. Short version:
    [`wrangler.toml`](wrangler.toml).
 4. In the dashboard, **Workers & Pages → Create → Connect to Git** → pick this
    repo. Build command `npm ci`, deploy command `npx wrangler deploy`.
-5. First build runs; then set the admin key:
-   `npx wrangler secret put ADMIN_KEY` (or add it as an encrypted variable in
-   the Worker's Settings).
+5. First build runs; then set the secrets:
+   `npx wrangler secret put ADMIN_KEY` (gates the results page) and, to run your
+   real event instead of the demo, `npx wrangler secret put CONFIG` (paste the
+   whole config as one line of JSON).
 6. Every `git push` to `main` redeploys. KV data persists across deploys.
 
 > KV list is eventually consistent — a brand-new vote can take up to ~60s to
@@ -152,7 +168,7 @@ folder). Any host works if it gives that path a persistent volume; on free tiers
 
 | Route | |
 | --- | --- |
-| `GET /api/config` | public config (title, activities, deadline, event) |
+| `GET /api/config` | public config (title, activities, deadline); `event` venue/time details only once submissions have closed |
 | `GET/POST/DELETE /api/vote/:token` | a respondent's own entry; `POST` must be a clean permutation of `activities` and is refused after `submissionsCloseAt` |
 | `GET /api/summary` | public aggregate — Borda points per activity + count, **no per-response data** |
 | `GET /api/results?key=<admin key>` | full breakdown incl. per-rank counts |
@@ -165,8 +181,11 @@ runtimes; only storage differs:
 | Node / self-host | [`server.js`](server.js) | [`src/store-file.js`](src/store-file.js) → `data.json` (`{ "responses": { "<token>": { ranking, updatedAt } } }`) |
 | Cloudflare Workers | [`worker.js`](worker.js) | [`src/store-kv.js`](src/store-kv.js) → KV, one key per response (`resp:<token>`) |
 
-Admin key: `ADMIN_KEY` env / secret if set, otherwise (Node only) auto-generated
-into `admin_key.txt`.
+Config is resolved at run time (`CONFIG` string → `config.real.json` → bundled
+`config.json`), so real event details never need to be committed. Admin key:
+`ADMIN_KEY` env / secret if set, otherwise (Node only) auto-generated into
+`admin_key.txt`. Nothing sensitive is written to a tracked file — `.gitignore`
+covers `data*`, `admin_key.txt`, `config.real.json`, `.dev.vars`, `.wrangler/`.
 
 ## Regenerating the screenshots
 
