@@ -14,7 +14,7 @@ directory = "./public"
 # (the id is just a resource handle — safe to commit.)
 [[kv_namespaces]]
 binding = "SURVEY_KV"
-id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+id = "394f3b730da7492eb99afe96e70e1664"
 
 # ADMIN_KEY (gates /results.html?key=...) is set as a secret, not here:
 #   npx wrangler secret put ADMIN_KEY
