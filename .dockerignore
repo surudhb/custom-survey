@@ -1,6 +1,12 @@
 node_modules
 npm-debug.log
+data
 data.json
 admin_key.txt
+config.real.json
+config.local.json
+docs
 .git
+.gitignore
 .DS_Store
+*.log
