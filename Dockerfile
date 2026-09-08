@@ -1,4 +1,5 @@
-# Birthday ranker — tiny single-process Node app.
+# custom-survey — tiny single-process Node app (the self-hosted path;
+# for Cloudflare Workers use `npm run deploy` instead).
 FROM node:20-alpine
 
 WORKDIR /app
@@ -9,6 +10,7 @@ RUN npm ci --omit=dev
 
 # App source
 COPY server.js config.json ./
+COPY src ./src
 COPY public ./public
 
 # Votes + admin key live here — mount a volume at /data to persist them

@@ -1,22 +1,26 @@
 {
   "name": "custom-survey",
   "version": "1.0.0",
-  "description": "Anonymous, editable ranked-choice survey for picking a group activity — drag to rank, live results, drumroll reveal",
+  "description": "Anonymous, editable ranked-choice survey for picking a group activity — drag to rank, live results, drumroll reveal. Runs on Node or Cloudflare Workers.",
   "main": "server.js",
+  "type": "module",
   "repository": "github:surudhb/custom-survey",
   "license": "MIT",
-  "type": "commonjs",
   "scripts": {
     "start": "node server.js",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
     "screenshots": "node scripts/screenshots.mjs"
   },
   "dependencies": {
-    "express": "^4.19.2"
+    "@hono/node-server": "^2.1.1",
+    "hono": "^4.13.7"
   },
   "devDependencies": {
-    "puppeteer-core": "^25.10.0"
+    "puppeteer-core": "^25.10.0",
+    "wrangler": "^4.130.0"
   },
   "engines": {
-    "node": ">=16"
+    "node": ">=18"
   }
 }
