@@ -1,0 +1,20 @@
+# Cloudflare Workers config. `npm run dev` runs this locally (with a local KV
+# simulation); `npm run deploy` or a connected Git repo ships it.
+name = "custom-survey"
+main = "worker.js"
+compatibility_date = "2025-06-01"
+
+# Serve public/ as static assets; requests that don't match a file fall through
+# to the Worker (which handles /api/*).
+[assets]
+directory = "./public"
+
+# Vote storage. Create the namespace once and paste its id here:
+#   npx wrangler kv namespace create SURVEY_KV
+# (the id is just a resource handle — safe to commit.)
+[[kv_namespaces]]
+binding = "SURVEY_KV"
+id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+
+# ADMIN_KEY (gates /results.html?key=...) is set as a secret, not here:
+#   npx wrangler secret put ADMIN_KEY

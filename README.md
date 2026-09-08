@@ -1,12 +1,13 @@
 # custom-survey
 
-A tiny self-hosted **ranked-choice survey** for picking a group activity. People
-drag the options into their preferred order — the order *is* their ranking, so
-it's impossible to rank two things the same or skip one. Anonymous, editable,
-no accounts.
+A tiny **ranked-choice survey** for picking a group activity. People drag the
+options into their preferred order — the order *is* their ranking, so it's
+impossible to rank two things the same or skip one. Anonymous, editable, no
+accounts.
 
 Built for "what should we actually do for the birthday / offsite / trip?", but
-the options, title, date and venues are all just config.
+the options, title, date and venues are all just config. Runs on **Node**
+(`npm start`) or **Cloudflare Workers** (free tier, `git push` to deploy).
 
 > The screenshots and the committed `config.json` use a made-up event
 > ("Alex's Birthday Bash", generic venues). Drop in your own details before you
@@ -45,20 +46,24 @@ the options, title, date and venues are all just config.
   slider: sliding speeds up the drumsticks, and reaching the end fires confetti
   and reveals the winning activity with its location, address, time and a Google
   Maps link.
-- **One flat file** for storage (`data.json`) and a serialized write queue — fine
-  for a poll with dozens of guests.
 
-## Quick start
+## Quick start (local)
 
-Requires Node.js 16+.
+Requires Node.js 18+.
 
 ```bash
 npm install
-npm start
+npm start           # Node + flat file, http://localhost:3000
 ```
 
-Open <http://localhost:3000>. On first run it prints an admin key (also saved to
-`admin_key.txt`) — the results page is `/results.html?key=<key>`.
+On first run it prints an admin key (also saved to `admin_key.txt`) — the
+results page is `/results.html?key=<key>`.
+
+To exercise the exact Cloudflare runtime + KV locally instead:
+
+```bash
+npm run dev         # wrangler dev, http://localhost:8787 (local KV simulation)
+```
 
 ## Configure
 
@@ -70,7 +75,7 @@ Everything lives in [`config.json`](config.json):
 | `description` | Instruction line under the photos |
 | `dateLabel` | Short date shown under the title (e.g. `"March 15"`) |
 | `activities` | The options to rank (2+; any number) |
-| `submissionsCloseAt` | Local datetime, no timezone — after this, visitors get the drumroll/winner view instead of the form, and the server rejects new votes |
+| `submissionsCloseAt` | Local datetime, no timezone — after this, visitors get the drumroll/winner view and new votes are rejected |
 | `event.time` | Full date/time shown on the winner screen |
 | `event.venues` | Per-activity `{ location, address, mapsUrl }`. Only the winner's is shown; if `mapsUrl` is blank a Google Maps search link is built from the address |
 
@@ -79,35 +84,51 @@ The two photos on the form are placeholders — replace the `src` of
 real images (or `data:` URIs).
 
 Keeping real names/dates/venues out of git: put them in `config.real.json`
-(git-ignored) and `cp config.real.json config.json` before you deploy.
+(git-ignored) and `cp config.real.json config.json` before you deploy. On
+Workers, `config.json` is bundled at build time, so changing it = redeploy.
 
-## Deploy — Cloudflare Tunnel (free, no account, HTTPS)
+## Deploy — Cloudflare Workers (free, no card, `git push` to ship)
 
-Run it on any machine you can leave on until the event and expose it with a free
-Cloudflare quick tunnel — no account, no domain, no port-forwarding.
+Storage is **Workers KV**; static files are served by Cloudflare's asset
+hosting; the Worker only handles `/api/*`. Free tier limits (100k KV reads/day,
+1k writes/day, 1 GB) are far more than a group poll needs.
 
-One-time: `brew install cloudflared` (macOS), or see the
+See **[docs/deploy-cloudflare.md](docs/deploy-cloudflare.md)** for the full
+click-by-click setup. Short version:
+
+1. Create a free Cloudflare account (no credit card).
+2. `npx wrangler login`
+3. `npx wrangler kv namespace create SURVEY_KV` → paste the printed `id` into
+   [`wrangler.toml`](wrangler.toml).
+4. In the dashboard, **Workers & Pages → Create → Connect to Git** → pick this
+   repo. Build command `npm ci`, deploy command `npx wrangler deploy`.
+5. First build runs; then set the admin key:
+   `npx wrangler secret put ADMIN_KEY` (or add it as an encrypted variable in
+   the Worker's Settings).
+6. Every `git push` to `main` redeploys. KV data persists across deploys.
+
+> KV list is eventually consistent — a brand-new vote can take up to ~60s to
+> show in the tally. Fine for a poll.
+
+## Deploy — Cloudflare Tunnel (self-host, no account, no signup)
+
+Run the Node server on any machine you can leave on until the event and expose
+it with a free quick tunnel. Truly zero-signup; storage is your own disk.
+
+One-time: `brew install cloudflared` (macOS) or see the
 [downloads page](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/).
-
-Then:
 
 ```bash
 ./run-public.sh
 ```
 
-That script starts the server (votes saved to `./data/`), opens the tunnel,
-restarts either half if it dies, and keeps a Mac awake while it runs. It prints:
+Starts the server (votes in `./data/`), opens the tunnel, restarts either half
+if it dies, keeps a Mac awake. Prints a `https://<random>.trycloudflare.com`
+URL — the link to share. `Ctrl+C` stops everything.
 
-```
-https://<random-words>.trycloudflare.com
-```
-
-— the link to share. No login for respondents. `Ctrl+C` stops everything.
-
-**The quick-tunnel URL is not stable** — it lives only as long as that
-`cloudflared` process. If it restarts you get a new URL and have to re-share. For
-a permanent URL, use a **named tunnel** (needs a free Cloudflare account + a
-domain on Cloudflare):
+**The quick-tunnel URL is not stable** — it changes if `cloudflared` restarts.
+For a permanent URL use a named tunnel (free Cloudflare account + a domain on
+Cloudflare):
 
 ```bash
 cloudflared tunnel login
@@ -116,41 +137,43 @@ cloudflared tunnel route dns custom-survey survey.yourdomain.com
 cloudflared tunnel run --url http://localhost:3000 custom-survey   # run `npm start` alongside
 ```
 
-## Deploy — Docker / other hosts
-
-The app reads/writes its vote file at `$DATA_DIR` (default: the project folder),
-so it runs anywhere with a persistent directory.
+## Deploy — Docker / any host with a disk
 
 ```bash
 docker build -t custom-survey .
 docker run -p 3000:3000 -v survey-data:/data custom-survey
 ```
 
-Fly.io / Railway / a VPS work too — attach a volume and point `DATA_DIR` at its
-mount path. On PaaS free tiers **without** a persistent volume, `data.json` is
-wiped on every restart/redeploy, so always give it a real disk.
+The Node server reads/writes its vote file at `$DATA_DIR` (default: the project
+folder). Any host works if it gives that path a persistent volume; on free tiers
+**without** one, `data.json` is wiped on every restart.
 
 ## How it works
 
-- `GET /api/config` — public config (title, activities, deadline, event).
-- `GET /api/vote/:token` / `POST /api/vote` / `DELETE /api/vote/:token` — a
-  respondent's own entry. `POST` validates that the body is a clean permutation
-  of `activities` and is refused after `submissionsCloseAt`.
-- `GET /api/summary` — public aggregate: Borda points per activity, total count,
-  **no per-response data**.
-- `GET /api/results?key=<admin key>` — full breakdown incl. per-rank counts.
+| Route | |
+| --- | --- |
+| `GET /api/config` | public config (title, activities, deadline, event) |
+| `GET/POST/DELETE /api/vote/:token` | a respondent's own entry; `POST` must be a clean permutation of `activities` and is refused after `submissionsCloseAt` |
+| `GET /api/summary` | public aggregate — Borda points per activity + count, **no per-response data** |
+| `GET /api/results?key=<admin key>` | full breakdown incl. per-rank counts |
 
-Responses live in `data.json` (`$DATA_DIR`) as
-`{ "responses": { "<token>": { "ranking": [...], "updatedAt": "..." } } }`.
-Delete the file to reset. The admin key sits next to it in `admin_key.txt`
-(or set `ADMIN_KEY=… npm start`).
+The API routes ([`src/app.js`](src/app.js)) are shared verbatim between the two
+runtimes; only storage differs:
+
+| | entry point | storage |
+| --- | --- | --- |
+| Node / self-host | [`server.js`](server.js) | [`src/store-file.js`](src/store-file.js) → `data.json` (`{ "responses": { "<token>": { ranking, updatedAt } } }`) |
+| Cloudflare Workers | [`worker.js`](worker.js) | [`src/store-kv.js`](src/store-kv.js) → KV, one key per response (`resp:<token>`) |
+
+Admin key: `ADMIN_KEY` env / secret if set, otherwise (Node only) auto-generated
+into `admin_key.txt`.
 
 ## Regenerating the screenshots
 
 ```bash
-npm install                 # dev dep: puppeteer-core (uses your system Chrome)
-npm start                   # in another shell
-node scripts/screenshots.mjs
+npm install          # dev dep: puppeteer-core (uses your system Chrome)
+npm start            # in another shell
+npm run screenshots
 ```
 
 Writes `docs/screenshots/*.png`, seeding and then clearing a handful of throwaway

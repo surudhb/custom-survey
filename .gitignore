@@ -1,6 +1,10 @@
 node_modules/
 *.log
 
+# wrangler / Cloudflare local state
+.wrangler/
+.dev.vars
+
 # runtime state — never commit responses or the admin key
 data/
 data.json
