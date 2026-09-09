@@ -55,6 +55,15 @@ export class FileStore {
     return Object.keys(this._load().responses).length;
   }
 
+  // Delete every response (leaves meta intact). Returns the count.
+  async clear() {
+    const data = this._load();
+    const deleted = Object.keys(data.responses).length;
+    data.responses = {};
+    await this._save(data);
+    return deleted;
+  }
+
   // Small server-side metadata, kept alongside responses in data.json.
   async getMeta(key) {
     const meta = this._load().meta;

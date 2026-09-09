@@ -225,7 +225,7 @@ Then open `$BASE` in a browser and submit a real ranking.
 | Swap a photo | `npx wrangler kv key put --binding SURVEY_KV --remote "asset:left" --path ./new.jpg` |
 | Adjust the write rate limit | edit `simple = { limit, period }` under `[[unsafe.bindings]]` in `wrangler.toml`, push |
 | Read all responses | `GET /results?key=…` in a browser |
-| Reset all votes | dashboard → Worker → **KV** → `SURVEY_KV` → delete the `resp:*` keys, or `npx wrangler kv key list --binding SURVEY_KV` then `... delete` |
+| Reset all votes (keeps photos) | `curl -X POST -H "x-admin-key: <ADMIN_KEY>" $BASE/api/admin/reset` |
 | See logs | dashboard → Worker → **Logs** (live tail), or `npx wrangler tail` |
 
 ---

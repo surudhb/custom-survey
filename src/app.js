@@ -213,11 +213,15 @@ export function createApp({ config, store, getAdminKey, rateLimit, getSessionSec
     return c.json({ totalResponses: responses.length, leaderboard });
   });
 
-  // Full breakdown incl. per-rank counts — requires the admin key.
-  app.get('/api/results', async (c) => {
+  async function isAdmin(c) {
     const key = c.req.query('key') || c.req.header('x-admin-key');
     const adminKey = await getAdminKey();
-    if (!adminKey || key !== adminKey) return c.json({ error: 'forbidden' }, 403);
+    return !!adminKey && key === adminKey;
+  }
+
+  // Full breakdown incl. per-rank counts — requires the admin key.
+  app.get('/api/results', async (c) => {
+    if (!(await isAdmin(c))) return c.json({ error: 'forbidden' }, 403);
 
     const responses = await store.list();
     const points = {};
@@ -244,6 +248,14 @@ export function createApp({ config, store, getAdminKey, rateLimit, getSessionSec
       .sort((a, b) => b.points - a.points);
 
     return c.json({ totalResponses: responses.length, activities, leaderboard });
+  });
+
+  // Wipe every response. Keeps photos (`asset:*`) and the session secret
+  // (`meta:*`). Admin key required. POST (not GET) so a link can't trigger it.
+  app.post('/api/admin/reset', async (c) => {
+    if (!(await isAdmin(c))) return c.json({ error: 'forbidden' }, 403);
+    const deleted = store.clear ? await store.clear() : 0;
+    return c.json({ ok: true, deleted });
   });
 
   return app;

@@ -188,6 +188,7 @@ folder). Any host works if it gives that path a persistent volume; on free tiers
 | `POST /api/vote` · `DELETE /api/vote` | create/overwrite / remove **this device's** response (identified by cookie) |
 | `GET /api/summary` | public aggregate — Borda points per activity + count, **no per-response data** |
 | `GET /api/results?key=<admin key>` | full breakdown incl. per-rank counts |
+| `POST /api/admin/reset` (admin key) | delete every response (keeps photos + session secret); returns `{ ok, deleted }` |
 | `GET /photo/left`, `GET /photo/right` | the two invite photos (KV / local file / placeholder) |
 
 ### Abuse guards
