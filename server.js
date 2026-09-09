@@ -54,10 +54,24 @@ if (!ADMIN_KEY) {
   }
 }
 
+// ---- simple in-memory write rate limiter (per client key, sliding window) ----
+const RL_WINDOW_MS = 60_000;
+const RL_MAX = 30;
+const rlHits = new Map();
+function rateLimit(key) {
+  const now = Date.now();
+  const recent = (rlHits.get(key) || []).filter((t) => now - t < RL_WINDOW_MS);
+  recent.push(now);
+  rlHits.set(key, recent);
+  if (rlHits.size > 5000) rlHits.clear(); // crude memory cap
+  return recent.length <= RL_MAX;
+}
+
 const api = createApp({
   config,
-  store: new FileStore(DATA_FILE),
+  store: new FileStore(DATA_FILE, { assetsDir: path.join(__dirname, 'photos') }),
   getAdminKey: () => ADMIN_KEY,
+  rateLimit,
 });
 
 // ---- static files (public/) ----

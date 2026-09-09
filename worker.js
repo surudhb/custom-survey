@@ -28,6 +28,21 @@ function resolveConfig(env) {
   return loadConfig(bundledConfig);
 }
 
+// Uses the Workers-native Rate Limiting binding if wrangler.toml declares one;
+// otherwise writes are unthrottled (the [[ratelimit]] block is optional).
+function makeRateLimit(env) {
+  const rl = env && env.RATE_LIMITER;
+  if (!rl || typeof rl.limit !== 'function') return undefined;
+  return async (key) => {
+    try {
+      const { success } = await rl.limit({ key });
+      return success !== false;
+    } catch {
+      return true; // fail open
+    }
+  };
+}
+
 export default {
   fetch(request, env, ctx) {
     if (!app) {
@@ -35,6 +50,7 @@ export default {
         config: resolveConfig(env),
         store: new KvStore(env.SURVEY_KV),
         getAdminKey: async () => env.ADMIN_KEY || null,
+        rateLimit: makeRateLimit(env),
       });
     }
     return app.fetch(request, env, ctx);

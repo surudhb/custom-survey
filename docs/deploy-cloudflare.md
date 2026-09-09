@@ -163,6 +163,29 @@ https://custom-survey.<subdomain>.workers.dev/results?key=<the ADMIN_KEY value>
 
 ---
 
+## 5b. Upload the two invite photos
+
+The photos are served at `/photo/left` and `/photo/right`. On Workers they come
+from KV keys `asset:left` / `asset:right`; until you upload them a placeholder
+shows. Any size / aspect ratio is fine — the page crops each to the same circle
+with CSS `object-fit: cover`.
+
+```bash
+npx wrangler kv key put --binding SURVEY_KV --remote "asset:left"  --path ./left.jpg
+npx wrangler kv key put --binding SURVEY_KV --remote "asset:right" --path ./right.jpg
+```
+
+`--path ./left.jpg` is a file on **your machine** (name it anything, put it
+wherever — `./` just means the current folder). Its bytes become the value of
+the KV key; nothing is committed to the repo (`photos/`, `*.jpg`, `*.png` etc.
+are git-ignored). Content-type is sniffed from the file; to be explicit add
+`--metadata '{"contentType":"image/jpeg"}'`.
+
+Replace a photo later by running the same command again (allow ~5 min for the
+edge cache to expire).
+
+---
+
 ## 6. Verify
 
 ```bash
@@ -185,7 +208,9 @@ Then open `$BASE` in a browser and submit a real ranking.
 | Task | Do this |
 | --- | --- |
 | Ship a code change | `git push` (option A) or `npx wrangler deploy` |
-| Change the event (title, activities, dates, venues, deadline) | update the `CONFIG` secret (`npx wrangler secret put CONFIG` with the new JSON) — no code change, no commit |
+| Change the event (title, activities, dates, venues, deadline, `maxResponses`) | update the `CONFIG` secret (`npx wrangler secret put CONFIG` with the new JSON) — no code change, no commit |
+| Swap a photo | `npx wrangler kv key put --binding SURVEY_KV --remote "asset:left" --path ./new.jpg` |
+| Adjust the write rate limit | edit `simple = { limit, period }` under `[[unsafe.bindings]]` in `wrangler.toml`, push |
 | Read all responses | `GET /results?key=…` in a browser |
 | Reset all votes | dashboard → Worker → **KV** → `SURVEY_KV` → delete the `resp:*` keys, or `npx wrangler kv key list --binding SURVEY_KV` then `... delete` |
 | See logs | dashboard → Worker → **Logs** (live tail), or `npx wrangler tail` |
@@ -213,8 +238,14 @@ Worker → **Settings** → **Domains & Routes** → **Add** → **Custom domain
   details never enter git, and updating the event is a `wrangler secret put`,
   not a deploy.
 - **Nothing sensitive is committed.** `ADMIN_KEY` and `CONFIG` are secrets;
-  `data*`, `admin_key.txt`, `config.real.json`, `.dev.vars` are git-ignored. The
-  KV namespace `id` in `wrangler.toml` is a resource handle, not a credential.
+  `data*`, `admin_key.txt`, `config.real.json`, `.dev.vars`, `photos/` and
+  root-level `*.jpg`/`*.png` are git-ignored. The KV namespace `id` in
+  `wrangler.toml` is a resource handle, not a credential.
+- **Rate limiting** uses the native Rate Limiting binding
+  (`[[unsafe.bindings]]`, `type = "ratelimit"`). It's free but still flagged
+  "unsafe" by wrangler (config shape not finalised) — the warning is expected.
+  If a deploy ever rejects it, delete the block (writes become unthrottled) and
+  add a rate-limit rule under the zone's **Security → WAF** instead.
 - **Local testing of this exact path:** `npm run dev` (wrangler dev) uses a
   local KV simulation and reads secrets from `.dev.vars` (copy
   `.dev.vars.example`) — no account needed, data lives under `.wrangler/`.

@@ -76,15 +76,26 @@ Everything lives in [`config.json`](config.json):
 | `dateLabel` | Short date shown under the title (e.g. `"March 15"`) |
 | `activities` | The options to rank (2+; any number) |
 | `submissionsCloseAt` | Local datetime, no timezone — after this, visitors get the drumroll/winner view and new votes are rejected |
+| `maxResponses` | Optional cap on *distinct* responses; once reached, new tokens are refused (existing entries stay editable). Omit / `null` for unlimited |
 | `event.time` | Full date/time shown on the winner screen |
 | `event.venues` | Per-activity `{ location, address, mapsUrl }`. Only the winner's is shown; if `mapsUrl` is blank a Google Maps search link is built from the address |
 
 `event.*` (venue names, addresses, time) is **not** served by `/api/config`
 until `submissionsCloseAt` has passed — it's only needed for the winner reveal.
 
-The two photos on the form are placeholders — replace the `src` of
-`.photo--left` / `.photo--right` in [`public/index.html`](public/index.html) with
-real images (or `data:` URIs).
+### The two invite photos
+
+Served at `/photo/left` and `/photo/right`, from whichever source exists, with
+an inline placeholder as the fallback:
+
+| Runtime | Source |
+| --- | --- |
+| Node (`npm start`) | `photos/left.<ext>` / `photos/right.<ext>` on disk (`photos/` is git-ignored; `jpg png webp gif`) |
+| Cloudflare Workers | KV keys `asset:left` / `asset:right` — upload with `wrangler kv key put` (below) |
+
+The `<img>` keeps its `.photo` class, so the rendered circle (size, overlap,
+mobile scaling) is fixed by CSS and `object-fit: cover` — the source image's
+real dimensions and aspect ratio don't matter.
 
 ### Keeping real event details out of git (public repo)
 
@@ -172,6 +183,26 @@ folder). Any host works if it gives that path a persistent volume; on free tiers
 | `GET/POST/DELETE /api/vote/:token` | a respondent's own entry; `POST` must be a clean permutation of `activities` and is refused after `submissionsCloseAt` |
 | `GET /api/summary` | public aggregate — Borda points per activity + count, **no per-response data** |
 | `GET /api/results?key=<admin key>` | full breakdown incl. per-rank counts |
+| `GET /photo/left`, `GET /photo/right` | the two invite photos (KV / local file / placeholder) |
+
+### Abuse guards
+
+- **Rate limiting** on `POST`/`DELETE /api/vote` per client IP → `429`. On
+  Workers via the native Rate Limiting binding (`[[unsafe.bindings]]` in
+  `wrangler.toml`, free; 8/60s); on Node a small in-memory limiter (30/60s).
+  Both are optional — remove the binding and writes are just unthrottled.
+- **`maxResponses`** cap (config) stops a flood of new tokens from filling
+  storage; edits to existing entries still work.
+- **Payload checks** — token must match `^[A-Za-z0-9_-]{8,128}$`; ranking must
+  be an exact permutation of `activities`.
+- Cloudflare's free plan also gives network-layer DDoS protection; you can add a
+  WAF rate-limit rule or Bot Fight Mode in the dashboard for extra cover.
+- **Tying a submission to a device:** today the identity is a random token the
+  browser keeps in `localStorage` (already per-device, but client-generated).
+  For a server-verified version, issue a signed `HttpOnly` cookie on first load
+  and key votes off that — a bad actor then can't mint identities without a
+  round-trip each (which the rate limiter catches). Not built in; ask if you
+  want it.
 
 The API routes ([`src/app.js`](src/app.js)) are shared verbatim between the two
 runtimes; only storage differs:

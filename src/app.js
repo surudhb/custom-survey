@@ -1,18 +1,28 @@
 import { Hono } from 'hono';
+import { PLACEHOLDER_SVG } from './assets.js';
 
-// Builds the JSON API. Storage and the admin key are injected so the same
-// routes run on Node (flat file) and on Cloudflare Workers (KV).
+// Builds the JSON API. Storage, the admin key and (optionally) a rate limiter
+// are injected so the same routes run on Node (flat file) and on Cloudflare
+// Workers (KV).
 //
-//   store.get(token)        -> { ranking, updatedAt } | null
-//   store.set(token, entry) -> Promise<void>
-//   store.delete(token)     -> Promise<void>
-//   store.list()            -> Promise<Array<{ ranking, updatedAt }>>
-//   getAdminKey()           -> Promise<string | null>
-export function createApp({ config, store, getAdminKey }) {
+//   store.get(token)         -> { ranking, updatedAt } | null
+//   store.set(token, entry)  -> Promise<void>
+//   store.delete(token)      -> Promise<void>
+//   store.list()             -> Promise<Array<{ ranking, updatedAt }>>
+//   store.count()            -> Promise<number>
+//   store.getAsset(key)      -> Promise<{ body, contentType } | null>
+//   getAdminKey()            -> Promise<string | null>
+//   rateLimit(key)           -> Promise<boolean>   (true = allow; optional)
+const TOKEN_RE = /^[A-Za-z0-9_-]{8,128}$/;
+
+export function createApp({ config, store, getAdminKey, rateLimit }) {
   const app = new Hono();
   const activities = config.activities;
   const n = activities.length;
   const activitySet = new Set(activities);
+  const maxResponses = Number.isInteger(config.maxResponses) && config.maxResponses > 0
+    ? config.maxResponses
+    : null;
 
   function isValidRanking(ranking) {
     if (!Array.isArray(ranking)) return false;
@@ -27,6 +37,22 @@ export function createApp({ config, store, getAdminKey }) {
     if (!config.submissionsCloseAt) return false;
     const closeMs = Date.parse(config.submissionsCloseAt);
     return !Number.isNaN(closeMs) && Date.now() > closeMs;
+  }
+
+  function clientKey(c) {
+    return (
+      c.req.header('cf-connecting-ip') ||
+      (c.req.header('x-forwarded-for') || '').split(',')[0].trim() ||
+      'anon'
+    );
+  }
+  async function limited(c) {
+    if (!rateLimit) return false;
+    try {
+      return !(await rateLimit(clientKey(c)));
+    } catch {
+      return false; // never block on limiter failure
+    }
   }
 
   app.get('/api/config', (c) =>
@@ -51,10 +77,12 @@ export function createApp({ config, store, getAdminKey }) {
 
   // Create or overwrite a response for a token.
   app.post('/api/vote', async (c) => {
+    if (await limited(c)) return c.json({ error: 'rate_limited' }, 429);
+
     const body = await c.req.json().catch(() => null);
     const token = body && body.token;
     const ranking = body && body.ranking;
-    if (typeof token !== 'string' || token.length < 8 || token.length > 128) {
+    if (typeof token !== 'string' || !TOKEN_RE.test(token)) {
       return c.json({ error: 'invalid_token' }, 400);
     }
     if (!isValidRanking(ranking)) {
@@ -64,14 +92,40 @@ export function createApp({ config, store, getAdminKey }) {
       return c.json({ error: 'submissions_closed' }, 403);
     }
     const existing = await store.get(token);
+    if (!existing && maxResponses && (await store.count()) >= maxResponses) {
+      return c.json({ error: 'capacity_reached' }, 403);
+    }
     await store.set(token, { ranking, updatedAt: new Date().toISOString() });
     return c.json({ ok: true, created: !existing });
   });
 
   // Let someone remove their own anonymous response.
   app.delete('/api/vote/:token', async (c) => {
+    if (await limited(c)) return c.json({ error: 'rate_limited' }, 429);
     await store.delete(c.req.param('token'));
     return c.json({ ok: true });
+  });
+
+  // Invite photos. Real images live in KV (`asset:left` / `asset:right`); this
+  // falls back to an inline placeholder so the <img> always resolves.
+  app.get('/photo/:side', async (c) => {
+    const side = c.req.param('side');
+    if (side !== 'left' && side !== 'right') return c.notFound();
+    const asset = store.getAsset ? await store.getAsset(`asset:${side}`) : null;
+    if (asset) {
+      return new Response(asset.body, {
+        headers: {
+          'content-type': asset.contentType,
+          'cache-control': 'public, max-age=300',
+        },
+      });
+    }
+    return new Response(PLACEHOLDER_SVG[side], {
+      headers: {
+        'content-type': 'image/svg+xml; charset=utf-8',
+        'cache-control': 'public, max-age=120',
+      },
+    });
   });
 
   // Public aggregate — Borda points per activity only, no per-response data.

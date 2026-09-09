@@ -17,6 +17,16 @@ directory = "./public"
 binding = "SURVEY_KV"
 id = "394f3b730da7492eb99afe96e70e1664"
 
+# Per-client write rate limiting (Workers-native, free). Caps POST/DELETE
+# /api/vote at `limit` requests per `period` seconds per IP. The code treats
+# this as optional — if a deploy ever rejects this block, delete it and add a
+# rate-limit rule in the dashboard WAF instead.
+[[unsafe.bindings]]
+name = "RATE_LIMITER"
+type = "ratelimit"
+namespace_id = "1001"
+simple = { limit = 8, period = 60 }
+
 # Secrets — set with `npx wrangler secret put <NAME>`, never written here:
 #   ADMIN_KEY   gates GET /api/results?key=...
 #   CONFIG      (optional) real event config as a JSON string; overrides the
