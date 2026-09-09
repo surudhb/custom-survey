@@ -1,0 +1,8 @@
+node_modules/
+.turbo/
+**/build/
+**/.wrangler/
+**/.react-router/
+*.log
+.dev.vars
+.DS_Store

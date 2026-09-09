@@ -1,0 +1,21 @@
+{
+  "name": "custom-survey-monorepo-spike",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.26.1",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "typecheck": "turbo run typecheck",
+    "db:generate": "pnpm --filter @survey/db generate",
+    "web:dev": "pnpm --filter @survey/web dev",
+    "web:build": "pnpm --filter @survey/web build",
+    "web:cf-typegen": "pnpm --filter @survey/web cf-typegen"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.9"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
