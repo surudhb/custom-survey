@@ -233,14 +233,31 @@
   }
   .manage summary::-webkit-details-marker { display: none; }
   .code-box {
+    position: relative;
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     background: var(--soft);
     border: 1px dashed var(--line);
     border-radius: 10px;
-    padding: 9px 11px;
+    padding: 9px 34px 9px 11px;
     font-size: 0.8rem;
     word-break: break-all;
     color: var(--ink);
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+    transition: border-color 0.16s ease, background 0.16s ease;
+  }
+  .code-box:hover { border-color: var(--accent); }
+  .code-box:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .code-box .copy-icon {
+    position: absolute;
+    top: 50%;
+    right: 10px;
+    transform: translateY(-50%);
+    width: 15px;
+    height: 15px;
+    color: var(--muted);
+    pointer-events: none;
   }
   input[type=text] {
     width: 100%;
@@ -450,6 +467,58 @@
     z-index: 60;
   }
 
+  /* "Copied to clipboard" toast */
+  #copy-toast {
+    position: fixed;
+    left: 50%;
+    bottom: max(20px, env(safe-area-inset-bottom, 0px));
+    transform: translate(-50%, 12px);
+    z-index: 70;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    min-width: 190px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 11px 14px 9px;
+    box-shadow: 0 14px 34px -14px rgba(40, 35, 45, 0.45);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.22s ease, transform 0.22s ease;
+  }
+  #copy-toast.show { opacity: 1; transform: translate(-50%, 0); }
+  #copy-toast .row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    color: var(--ink);
+  }
+  #copy-toast .check {
+    flex: 0 0 auto;
+    width: 18px; height: 18px;
+    color: var(--accent);
+  }
+  #copy-toast .track {
+    height: 3px;
+    border-radius: 999px;
+    background: var(--soft);
+    overflow: hidden;
+  }
+  #copy-toast .track > i {
+    display: block;
+    height: 100%;
+    width: 100%;
+    transform-origin: left center;
+    border-radius: 999px;
+    background: var(--accent);
+  }
+  #copy-toast.show .track > i {
+    animation: copy-drain var(--copy-ms, 2000ms) linear forwards;
+  }
+  @keyframes copy-drain { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
   }
@@ -463,6 +532,15 @@
   </svg>
 </button>
 <div id="theme-name" aria-live="polite"></div>
+<div id="copy-toast" role="status" aria-live="polite">
+  <div class="row">
+    <svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M20 6 9 17l-5-5"></path>
+    </svg>
+    <span>Copied to clipboard</span>
+  </div>
+  <div class="track"><i></i></div>
+</div>
 <main class="invite">
   <div class="frame">
    <section id="vote-view">
@@ -485,8 +563,14 @@
     <details class="manage">
       <summary>Already voted? Edit or move it to another device</summary>
       <p class="hint">You're identified only by a private cookie this site set in your browser — no name, no login. Submitting again just overwrites your previous entry.</p>
-      <div class="hint">Your code (paste it on another device to edit the same entry there):</div>
-      <div class="code-box" id="my-code">—</div>
+      <div class="hint">Your code (tap to copy, then paste it on another device to edit the same entry there):</div>
+      <button type="button" class="code-box" id="my-code" aria-label="Copy your code to the clipboard">
+        <span id="my-code-text">—</span>
+        <svg class="copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="9" y="9" width="12" height="12" rx="2"></rect>
+          <path d="M5 15V5a2 2 0 0 1 2-2h10"></path>
+        </svg>
+      </button>
       <input type="text" id="load-code" placeholder="Paste a code to load that response">
       <button class="secondary" id="load-btn">Load response</button>
       <button class="secondary" id="clear-btn">Delete my response</button>
@@ -606,6 +690,59 @@ function applyTheme(i, announce) {
 })();
 document.getElementById('theme-btn').addEventListener('click', () => applyTheme(themeIdx + 1, true));
 
+/* ---- tap the code box to copy it, with a self-dismissing toast ---- */
+(function setupCopyCode() {
+  const box = document.getElementById('my-code');
+  const toast = document.getElementById('copy-toast');
+  const DURATION = 2000;
+  let hideTimer;
+
+  async function copyText(text) {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch {}
+    // fallback for non-secure contexts / older browsers
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      ta.remove();
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+
+  function showToast() {
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    toast.style.setProperty('--copy-ms', DURATION + 'ms');
+    // restart the drain animation even on rapid re-taps
+    toast.classList.remove('show');
+    void toast.offsetWidth; // reflow
+    toast.classList.add('show');
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => toast.classList.remove('show'), reduce ? 1200 : DURATION);
+  }
+
+  async function onCopy() {
+    const code = document.getElementById('my-code-text').textContent.trim();
+    if (!code || code === '—') return;
+    const ok = await copyText(code);
+    if (ok) showToast();
+    else statusEl.textContent = 'Could not copy — select the code and copy it manually.';
+  }
+
+  box.addEventListener('click', onCopy);
+})();
+
 // Identity is a server-issued, HMAC-signed HttpOnly cookie. `myToken` is the
 // id the server derived from it; `myCode` is the portable string to paste on
 // another device. localStorage only keeps a display copy.
@@ -620,7 +757,7 @@ async function refreshSession() {
       myToken = d.token;
       myCode = d.code;
       try { localStorage.setItem('ranker_code', d.code); } catch {}
-      document.getElementById('my-code').textContent = d.code;
+      document.getElementById('my-code-text').textContent = d.code;
     }
   } catch {}
   return myToken;
@@ -928,7 +1065,7 @@ document.getElementById('load-btn').addEventListener('click', async () => {
   myToken = token;
   myCode = code;
   try { localStorage.setItem('ranker_code', code); } catch {}
-  document.getElementById('my-code').textContent = code;
+  document.getElementById('my-code-text').textContent = code;
 
   const res = await fetch('/api/vote/' + encodeURIComponent(token));
   if (res.ok) {
