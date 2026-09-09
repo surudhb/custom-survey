@@ -9,12 +9,15 @@ compatibility_date = "2025-06-01"
 [assets]
 directory = "./public"
 
-# Vote storage. Create the namespace once and paste its id here:
-#   npx wrangler kv namespace create SURVEY_KV
-# (the id is just a resource handle — safe to commit.)
+# Vote storage.  Create the namespace once:  npx wrangler kv namespace create SURVEY_KV
+# The id is a resource handle, NOT a secret — it does nothing without an API
+# token scoped to this account, and Cloudflare expects it in this committed
+# file. Safe to leave here.
 [[kv_namespaces]]
 binding = "SURVEY_KV"
-id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+id = "394f3b730da7492eb99afe96e70e1664"
 
-# ADMIN_KEY (gates /results.html?key=...) is set as a secret, not here:
-#   npx wrangler secret put ADMIN_KEY
+# Secrets — set with `npx wrangler secret put <NAME>`, never written here:
+#   ADMIN_KEY   gates GET /api/results?key=...
+#   CONFIG      (optional) real event config as a JSON string; overrides the
+#               committed demo config.json at runtime

@@ -23,6 +23,12 @@ export function createApp({ config, store, getAdminKey }) {
     return true;
   }
 
+  function submissionsClosed() {
+    if (!config.submissionsCloseAt) return false;
+    const closeMs = Date.parse(config.submissionsCloseAt);
+    return !Number.isNaN(closeMs) && Date.now() > closeMs;
+  }
+
   app.get('/api/config', (c) =>
     c.json({
       title: config.title,
@@ -30,7 +36,9 @@ export function createApp({ config, store, getAdminKey }) {
       dateLabel: config.dateLabel || null,
       activities,
       submissionsCloseAt: config.submissionsCloseAt || null,
-      event: config.event || null,
+      // Venue names / addresses / time are only needed for the winner reveal —
+      // withhold them until submissions close so they aren't exposed early.
+      event: submissionsClosed() ? config.event || null : null,
     }),
   );
 
@@ -52,11 +60,8 @@ export function createApp({ config, store, getAdminKey }) {
     if (!isValidRanking(ranking)) {
       return c.json({ error: 'invalid_ranking' }, 400);
     }
-    if (config.submissionsCloseAt) {
-      const closeMs = Date.parse(config.submissionsCloseAt); // local time if no zone given
-      if (!Number.isNaN(closeMs) && Date.now() > closeMs) {
-        return c.json({ error: 'submissions_closed' }, 403);
-      }
+    if (submissionsClosed()) {
+      return c.json({ error: 'submissions_closed' }, 403);
     }
     const existing = await store.get(token);
     await store.set(token, { ranking, updatedAt: new Date().toISOString() });

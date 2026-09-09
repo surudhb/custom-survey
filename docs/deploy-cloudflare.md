@@ -70,16 +70,22 @@ binding = "SURVEY_KV"
 id = "0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d"   # <- your id
 ```
 
-The id is just a resource handle (useless without access to your account), so
-it's safe to commit.
-
-Commit it:
+**The id is not a secret.** It's a resource handle — like a database name. It
+does nothing without an API token scoped to your account, Cloudflare's tooling
+expects it in this committed file, and it appears in thousands of public repos.
+Safe to commit.
 
 ```bash
 git add wrangler.toml
 git commit -m "Set KV namespace id"
 git push
 ```
+
+> Want it out of the repo anyway? Delete the `[[kv_namespaces]]` block and add
+> the binding in the dashboard (Worker → **Settings** → **Bindings** → **Add** →
+> **KV namespace**, binding name `SURVEY_KV`). Git-connected builds pick up
+> dashboard bindings; a bare `npx wrangler deploy` would then need
+> `--kv-namespace SURVEY_KV=<id>`.
 
 ---
 
@@ -117,24 +123,39 @@ repo *and* still run `wrangler deploy` manually.)
 
 ---
 
-## 5. Set the admin key
+## 5. Set the secrets
 
-The results page (`/results?key=…`) is gated by `ADMIN_KEY`. It isn't in the
-repo, so set it as a secret **after the first deploy** (the Worker has to exist
-first):
+Set these **after the first deploy** (the Worker has to exist first). Neither is
+ever written to the repo.
+
+### `ADMIN_KEY` (required for the results page)
 
 ```bash
 npx wrangler secret put ADMIN_KEY
 # paste a value you choose, e.g. a long random string — press Enter
 ```
 
-Or in the dashboard: Worker → **Settings** → **Variables and Secrets** → **Add**
-→ name `ADMIN_KEY`, type **Secret**, paste the value, **Deploy**.
+### `CONFIG` (to run your real event instead of the committed demo)
+
+The repo's `config.json` is a made-up event. Put your real one in as a secret so
+real names / dates / venues never touch git:
+
+```bash
+# minify config.real.json to one line and pipe it in:
+node -e "process.stdout.write(JSON.stringify(require('./config.real.json')))" | npx wrangler secret put CONFIG
+```
+
+(or `npx wrangler secret put CONFIG` and paste the single-line JSON yourself).
+Leave it unset to serve the demo config. `wrangler secret put` re-deploys the
+Worker on its own, so the new config is live within seconds — no code change.
+
+Either secret can also be set in the dashboard: Worker → **Settings** →
+**Variables and Secrets** → **Add** → type **Secret**.
 
 Your results URL is then:
 
 ```
-https://custom-survey.<subdomain>.workers.dev/results?key=<the value you set>
+https://custom-survey.<subdomain>.workers.dev/results?key=<the ADMIN_KEY value>
 ```
 
 (Until `ADMIN_KEY` is set, `/api/results` returns 403 — the public form and
@@ -164,8 +185,7 @@ Then open `$BASE` in a browser and submit a real ranking.
 | Task | Do this |
 | --- | --- |
 | Ship a code change | `git push` (option A) or `npx wrangler deploy` |
-| Change the event (title, activities, dates, venues) | edit `config.json`, commit, push — it's bundled at build time |
-| Change the deadline behaviour | edit `submissionsCloseAt` in `config.json`, push |
+| Change the event (title, activities, dates, venues, deadline) | update the `CONFIG` secret (`npx wrangler secret put CONFIG` with the new JSON) — no code change, no commit |
 | Read all responses | `GET /results?key=…` in a browser |
 | Reset all votes | dashboard → Worker → **KV** → `SURVEY_KV` → delete the `resp:*` keys, or `npx wrangler kv key list --binding SURVEY_KV` then `... delete` |
 | See logs | dashboard → Worker → **Logs** (live tail), or `npx wrangler tail` |
@@ -188,9 +208,15 @@ Worker → **Settings** → **Domains & Routes** → **Add** → **Custom domain
   read-your-writes consistent in the same region and near-instant.
 - **Free tier writes:** 1,000 KV writes/day. Each submit or edit is one write —
   a poll with dozens of guests is nowhere near the limit.
-- **`config.json` is baked into the deploy.** There's no runtime file to edit;
-  change it in the repo and redeploy.
+- **Config is runtime-injected.** The Worker reads the `CONFIG` secret if set,
+  else falls back to the committed demo `config.json`. So your real event
+  details never enter git, and updating the event is a `wrangler secret put`,
+  not a deploy.
+- **Nothing sensitive is committed.** `ADMIN_KEY` and `CONFIG` are secrets;
+  `data*`, `admin_key.txt`, `config.real.json`, `.dev.vars` are git-ignored. The
+  KV namespace `id` in `wrangler.toml` is a resource handle, not a credential.
 - **Local testing of this exact path:** `npm run dev` (wrangler dev) uses a
-  local KV simulation — no account needed, data lives under `.wrangler/`.
+  local KV simulation and reads secrets from `.dev.vars` (copy
+  `.dev.vars.example`) — no account needed, data lives under `.wrangler/`.
 - **`nodejs_compat` is not required** — the Worker code uses only web-standard
   APIs plus the KV binding.
