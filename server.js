@@ -13,6 +13,7 @@ import { serve } from '@hono/node-server';
 import { createApp } from './src/app.js';
 import { FileStore } from './src/store-file.js';
 import { loadConfig } from './src/config.js';
+import { resolveSecret } from './src/session.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
@@ -67,11 +68,15 @@ function rateLimit(key) {
   return recent.length <= RL_MAX;
 }
 
+const store = new FileStore(DATA_FILE, { assetsDir: path.join(__dirname, 'photos') });
 const api = createApp({
   config,
-  store: new FileStore(DATA_FILE, { assetsDir: path.join(__dirname, 'photos') }),
+  store,
   getAdminKey: () => ADMIN_KEY,
   rateLimit,
+  // Cookie-signing secret: SESSION_SECRET if set, else a random one persisted
+  // in data.json (meta) so it survives restarts.
+  getSessionSecret: () => resolveSecret(process.env.SESSION_SECRET, store, 'session_secret'),
 });
 
 // ---- static files (public/) ----

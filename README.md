@@ -108,10 +108,12 @@ run time, so it never has to be committed:
 | `wrangler dev` | `CONFIG` in `.dev.vars` (git-ignored; see `.dev.vars.example`) |
 | Cloudflare Workers | `npx wrangler secret put CONFIG` — paste the whole config as one line of JSON |
 
-Secrets (`ADMIN_KEY`, `CONFIG`) are only ever set via env vars / `wrangler
-secret` / `.dev.vars` — never written to a tracked file. The KV namespace `id`
-in `wrangler.toml` is **not** a secret (it's a resource handle, useless without
-an account-scoped API token) and is meant to be committed.
+Secrets (`ADMIN_KEY`, `CONFIG`, `SESSION_SECRET`) are only ever set via env vars
+/ `wrangler secret` / `.dev.vars` — never written to a tracked file.
+`SESSION_SECRET` is optional (a random one is generated + persisted if unset)
+but recommended on Workers to avoid a first-request generation race. The KV
+namespace `id` in `wrangler.toml` is **not** a secret (a resource handle,
+useless without an account-scoped API token) and is meant to be committed.
 
 ## Deploy — Cloudflare Workers (free, no card, `git push` to ship)
 
@@ -179,30 +181,39 @@ folder). Any host works if it gives that path a persistent volume; on free tiers
 
 | Route | |
 | --- | --- |
+| `GET /api/session` | issues the signed `HttpOnly` device cookie; returns `{ token, code }` |
+| `POST /api/session/adopt` | `{ code }` → verify signature, re-issue as this device's cookie |
 | `GET /api/config` | public config (title, activities, deadline); `event` venue/time details only once submissions have closed |
-| `GET/POST/DELETE /api/vote/:token` | a respondent's own entry; `POST` must be a clean permutation of `activities` and is refused after `submissionsCloseAt` |
+| `GET /api/vote/:token` | fetch a response by id (to pre-fill an edit) |
+| `POST /api/vote` · `DELETE /api/vote` | create/overwrite / remove **this device's** response (identified by cookie) |
 | `GET /api/summary` | public aggregate — Borda points per activity + count, **no per-response data** |
 | `GET /api/results?key=<admin key>` | full breakdown incl. per-rank counts |
 | `GET /photo/left`, `GET /photo/right` | the two invite photos (KV / local file / placeholder) |
 
 ### Abuse guards
 
-- **Rate limiting** on `POST`/`DELETE /api/vote` per client IP → `429`. On
-  Workers via the native Rate Limiting binding (`[[unsafe.bindings]]` in
-  `wrangler.toml`, free; 8/60s); on Node a small in-memory limiter (30/60s).
-  Both are optional — remove the binding and writes are just unthrottled.
-- **`maxResponses`** cap (config) stops a flood of new tokens from filling
+- **Server-verified device identity.** On first load `GET /api/session` sets a
+  **signed, `HttpOnly` cookie** (`sid = <id>.<HMAC-SHA256(id, secret)>`); votes
+  key off the id the server derives from it, not off anything the client sends.
+  A forged/tampered cookie fails the signature check and is treated as "no
+  session" (a fresh identity is minted) — you can't point it at someone else's
+  slot. The signing secret is `SESSION_SECRET` if set, else a random one
+  persisted in storage (KV `meta:session_secret` / `data.json`).
+  - **Cross-device edits still work:** the cookie value doubles as a portable
+    *code*. `POST /api/session/adopt {code}` re-verifies its signature and
+    re-issues it as this device's cookie, so pasting your code on a phone lets
+    you edit the same entry there.
+- **Rate limiting** on `POST /api/vote`, `DELETE /api/vote`, `POST
+  /api/session/adopt` per client IP → `429`. Workers: native Rate Limiting
+  binding (`[[unsafe.bindings]]` in `wrangler.toml`, free; 8/60s). Node:
+  in-memory limiter (30/60s). Both optional — remove the binding and writes are
+  unthrottled.
+- **`maxResponses`** cap (config) stops a flood of new identities from filling
   storage; edits to existing entries still work.
-- **Payload checks** — token must match `^[A-Za-z0-9_-]{8,128}$`; ranking must
-  be an exact permutation of `activities`.
-- Cloudflare's free plan also gives network-layer DDoS protection; you can add a
-  WAF rate-limit rule or Bot Fight Mode in the dashboard for extra cover.
-- **Tying a submission to a device:** today the identity is a random token the
-  browser keeps in `localStorage` (already per-device, but client-generated).
-  For a server-verified version, issue a signed `HttpOnly` cookie on first load
-  and key votes off that — a bad actor then can't mint identities without a
-  round-trip each (which the rate limiter catches). Not built in; ask if you
-  want it.
+- **Payload checks** — ranking must be an exact permutation of `activities`;
+  ids/codes are format-checked before any lookup.
+- Cloudflare's free plan also gives network-layer DDoS protection; add a WAF
+  rate-limit rule or Bot Fight Mode in the dashboard for extra cover.
 
 The API routes ([`src/app.js`](src/app.js)) are shared verbatim between the two
 runtimes; only storage differs:
@@ -213,10 +224,11 @@ runtimes; only storage differs:
 | Cloudflare Workers | [`worker.js`](worker.js) | [`src/store-kv.js`](src/store-kv.js) → KV, one key per response (`resp:<token>`) |
 
 Config is resolved at run time (`CONFIG` string → `config.real.json` → bundled
-`config.json`), so real event details never need to be committed. Admin key:
-`ADMIN_KEY` env / secret if set, otherwise (Node only) auto-generated into
-`admin_key.txt`. Nothing sensitive is written to a tracked file — `.gitignore`
-covers `data*`, `admin_key.txt`, `config.real.json`, `.dev.vars`, `.wrangler/`.
+`config.json`), so real event details never need to be committed. `ADMIN_KEY`
+and `SESSION_SECRET` come from env / `wrangler secret`, else are generated and
+persisted (admin key → `admin_key.txt`; session secret → store metadata).
+Nothing sensitive is written to a tracked file — `.gitignore` covers `data*`,
+`admin_key.txt`, `config.real.json`, `.dev.vars`, `photos/`, `.wrangler/`.
 
 ## Regenerating the screenshots
 

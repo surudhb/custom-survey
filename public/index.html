@@ -484,8 +484,8 @@
 
     <details class="manage">
       <summary>Already voted? Edit or move it to another device</summary>
-      <p class="hint">This page remembers you only through the private code below, kept in this browser. Submitting again just overwrites your previous entry.</p>
-      <div class="hint">Your code (save it to edit from another device):</div>
+      <p class="hint">You're identified only by a private cookie this site set in your browser — no name, no login. Submitting again just overwrites your previous entry.</p>
+      <div class="hint">Your code (paste it on another device to edit the same entry there):</div>
       <div class="code-box" id="my-code">—</div>
       <input type="text" id="load-code" placeholder="Paste a code to load that response">
       <button class="secondary" id="load-btn">Load response</button>
@@ -606,17 +606,24 @@ function applyTheme(i, announce) {
 })();
 document.getElementById('theme-btn').addEventListener('click', () => applyTheme(themeIdx + 1, true));
 
-function getToken() {
-  let t = localStorage.getItem('ranker_token');
-  if (!t) {
-    t = crypto.randomUUID ? crypto.randomUUID() : (Date.now() + '-' + Math.random().toString(36).slice(2));
-    localStorage.setItem('ranker_token', t);
-  }
-  return t;
-}
-function setToken(t) {
-  localStorage.setItem('ranker_token', t);
-  document.getElementById('my-code').textContent = t;
+// Identity is a server-issued, HMAC-signed HttpOnly cookie. `myToken` is the
+// id the server derived from it; `myCode` is the portable string to paste on
+// another device. localStorage only keeps a display copy.
+let myToken = null;
+let myCode = null;
+
+async function refreshSession() {
+  try {
+    const r = await fetch('/api/session', { credentials: 'same-origin' });
+    const d = await r.json();
+    if (d && d.token) {
+      myToken = d.token;
+      myCode = d.code;
+      try { localStorage.setItem('ranker_code', d.code); } catch {}
+      document.getElementById('my-code').textContent = d.code;
+    }
+  } catch {}
+  return myToken;
 }
 
 function renderList(order) {
@@ -798,18 +805,19 @@ async function init() {
     document.querySelectorAll('.date').forEach((el) => { el.textContent = appConfig.dateLabel; });
   }
 
-  const token = getToken();
-  document.getElementById('my-code').textContent = token;
+  await refreshSession();
 
   let order = activities.slice();
   let alreadyVoted = false;
-  try {
-    const existing = await fetch('/api/vote/' + encodeURIComponent(token)).then((r) => (r.ok ? r.json() : null));
-    if (existing && existing.ranking) {
-      order = existing.ranking;
-      alreadyVoted = true;
-    }
-  } catch {}
+  if (myToken) {
+    try {
+      const existing = await fetch('/api/vote/' + encodeURIComponent(myToken)).then((r) => (r.ok ? r.json() : null));
+      if (existing && existing.ranking) {
+        order = existing.ranking;
+        alreadyVoted = true;
+      }
+    } catch {}
+  }
   renderList(order);
 
   if (submissionsClosed()) {
@@ -824,15 +832,24 @@ async function init() {
   if (alreadyVoted) showThanks();
 }
 
+async function submitRanking() {
+  return fetch('/api/vote', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ranking: currentOrder }),
+  });
+}
+
 document.getElementById('submit-btn').addEventListener('click', async () => {
   confettiBurst();
-  const token = getToken();
   statusEl.textContent = 'Submitting…';
-  const res = await fetch('/api/vote', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token, ranking: currentOrder }),
-  });
+  let res = await submitRanking();
+  if (res.status === 400 || res.status === 401) {
+    // session may have been lost (cookies cleared) — re-establish and retry once
+    await refreshSession();
+    res = await submitRanking();
+  }
   if (res.ok) {
     statusEl.textContent = '';
     showThanks();
@@ -895,20 +912,37 @@ othersBtn.addEventListener('click', async () => {
 document.getElementById('load-btn').addEventListener('click', async () => {
   const code = document.getElementById('load-code').value.trim();
   if (!code) return;
-  const res = await fetch('/api/vote/' + encodeURIComponent(code));
-  if (!res.ok) {
-    statusEl.textContent = 'No response found for that code.';
+  // Adopt the code: the server verifies its signature and re-issues it as this
+  // device's cookie, so edits from here save to the same entry.
+  const adopt = await fetch('/api/session/adopt', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code }),
+  });
+  if (!adopt.ok) {
+    statusEl.textContent = "That code isn't valid.";
     return;
   }
-  const data = await res.json();
-  setToken(code);
-  renderList(data.ranking);
-  statusEl.textContent = 'Loaded. Editing will overwrite this response.';
+  const { token } = await adopt.json();
+  myToken = token;
+  myCode = code;
+  try { localStorage.setItem('ranker_code', code); } catch {}
+  document.getElementById('my-code').textContent = code;
+
+  const res = await fetch('/api/vote/' + encodeURIComponent(token));
+  if (res.ok) {
+    const data = await res.json();
+    renderList(data.ranking);
+    statusEl.textContent = 'Loaded. Submitting will overwrite this response.';
+  } else {
+    renderList(activities.slice());
+    statusEl.textContent = 'Code accepted — no ranking saved under it yet.';
+  }
 });
 
 document.getElementById('clear-btn').addEventListener('click', async () => {
-  const token = getToken();
-  await fetch('/api/vote/' + encodeURIComponent(token), { method: 'DELETE' });
+  await fetch('/api/vote', { method: 'DELETE', credentials: 'same-origin' });
   renderList(activities.slice());
   statusEl.textContent = 'Your response was deleted.';
 });

@@ -55,6 +55,18 @@ export class FileStore {
     return Object.keys(this._load().responses).length;
   }
 
+  // Small server-side metadata, kept alongside responses in data.json.
+  async getMeta(key) {
+    const meta = this._load().meta;
+    return (meta && meta[key]) || null;
+  }
+  async setMeta(key, value) {
+    const data = this._load();
+    data.meta = data.meta || {};
+    data.meta[key] = value;
+    await this._save(data);
+  }
+
   async getAsset(key) {
     if (!this.assetsDir) return null;
     const name = key.replace(/^asset:/, '');

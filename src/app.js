@@ -1,21 +1,21 @@
 import { Hono } from 'hono';
+import { getCookie, setCookie } from 'hono/cookie';
 import { PLACEHOLDER_SVG } from './assets.js';
+import { newId, makeCode, verifyCode } from './session.js';
 
-// Builds the JSON API. Storage, the admin key and (optionally) a rate limiter
-// are injected so the same routes run on Node (flat file) and on Cloudflare
-// Workers (KV).
+// Builds the JSON API. Storage, the admin key, a rate limiter and a session
+// secret are injected so the same routes run on Node (flat file) and on
+// Cloudflare Workers (KV).
 //
-//   store.get(token)         -> { ranking, updatedAt } | null
-//   store.set(token, entry)  -> Promise<void>
-//   store.delete(token)      -> Promise<void>
-//   store.list()             -> Promise<Array<{ ranking, updatedAt }>>
-//   store.count()            -> Promise<number>
-//   store.getAsset(key)      -> Promise<{ body, contentType } | null>
-//   getAdminKey()            -> Promise<string | null>
-//   rateLimit(key)           -> Promise<boolean>   (true = allow; optional)
+//   store.get/set/delete/list/count/getAsset/getMeta/setMeta
+//   getAdminKey()      -> Promise<string | null>
+//   rateLimit(key)     -> Promise<boolean>          (true = allow; optional)
+//   getSessionSecret() -> Promise<string>           (optional; enables cookies)
 const TOKEN_RE = /^[A-Za-z0-9_-]{8,128}$/;
+const COOKIE = 'sid';
+const COOKIE_MAX_AGE = 60 * 60 * 24 * 60; // 60 days
 
-export function createApp({ config, store, getAdminKey, rateLimit }) {
+export function createApp({ config, store, getAdminKey, rateLimit, getSessionSecret }) {
   const app = new Hono();
   const activities = config.activities;
   const n = activities.length;
@@ -55,6 +55,66 @@ export function createApp({ config, store, getAdminKey, rateLimit }) {
     }
   }
 
+  // ---- sessions --------------------------------------------------------------
+  let _secret;
+  let _secretTried = false;
+  async function secret() {
+    if (!_secretTried) {
+      _secretTried = true;
+      try {
+        _secret = getSessionSecret ? await getSessionSecret() : null;
+      } catch {
+        _secret = null;
+      }
+    }
+    return _secret;
+  }
+  function cookieOpts(c) {
+    return {
+      httpOnly: true,
+      sameSite: 'Lax',
+      path: '/',
+      maxAge: COOKIE_MAX_AGE,
+      secure: new URL(c.req.url).protocol === 'https:',
+    };
+  }
+  // Returns { id, code } for the current device, minting + setting a fresh
+  // signed cookie if there isn't a valid one. { id: null } means sessions are
+  // disabled (no secret provider) — callers then fall back to a client token.
+  async function ensureSession(c) {
+    const sec = await secret();
+    if (!sec) return { id: null, code: null };
+    const current = getCookie(c, COOKIE);
+    const id = current ? await verifyCode(current, sec) : null;
+    if (id) return { id, code: current };
+    const freshId = newId();
+    const code = await makeCode(freshId, sec);
+    setCookie(c, COOKIE, code, cookieOpts(c));
+    return { id: freshId, code };
+  }
+
+  // Hand the browser its device id + portable code (the cookie is HttpOnly, so
+  // page JS can't read it directly).
+  app.get('/api/session', async (c) => {
+    const s = await ensureSession(c);
+    if (!s.id) return c.json({ sessions: false });
+    return c.json({ token: s.id, code: s.code });
+  });
+
+  // Adopt a code copied from another device: verify its signature, then make it
+  // this device's cookie.
+  app.post('/api/session/adopt', async (c) => {
+    if (await limited(c)) return c.json({ error: 'rate_limited' }, 429);
+    const sec = await secret();
+    if (!sec) return c.json({ error: 'sessions_disabled' }, 400);
+    const body = await c.req.json().catch(() => ({}));
+    const code = typeof body.code === 'string' ? body.code.trim() : '';
+    const id = await verifyCode(code, sec);
+    if (!id) return c.json({ error: 'invalid_code' }, 400);
+    setCookie(c, COOKIE, code, cookieOpts(c));
+    return c.json({ token: id });
+  });
+
   app.get('/api/config', (c) =>
     c.json({
       title: config.title,
@@ -75,22 +135,29 @@ export function createApp({ config, store, getAdminKey, rateLimit }) {
     return c.json({ ranking: entry.ranking, updatedAt: entry.updatedAt });
   });
 
-  // Create or overwrite a response for a token.
+  // Create or overwrite this device's response.
   app.post('/api/vote', async (c) => {
     if (await limited(c)) return c.json({ error: 'rate_limited' }, 429);
 
     const body = await c.req.json().catch(() => null);
-    const token = body && body.token;
     const ranking = body && body.ranking;
-    if (typeof token !== 'string' || !TOKEN_RE.test(token)) {
-      return c.json({ error: 'invalid_token' }, 400);
-    }
     if (!isValidRanking(ranking)) {
       return c.json({ error: 'invalid_ranking' }, 400);
     }
     if (submissionsClosed()) {
       return c.json({ error: 'submissions_closed' }, 403);
     }
+
+    const session = await ensureSession(c);
+    let token = session.id;
+    if (!token) {
+      // sessions disabled — trust the client-supplied token instead
+      token = body && body.token;
+      if (typeof token !== 'string' || !TOKEN_RE.test(token)) {
+        return c.json({ error: 'invalid_token' }, 400);
+      }
+    }
+
     const existing = await store.get(token);
     if (!existing && maxResponses && (await store.count()) >= maxResponses) {
       return c.json({ error: 'capacity_reached' }, 403);
@@ -99,12 +166,17 @@ export function createApp({ config, store, getAdminKey, rateLimit }) {
     return c.json({ ok: true, created: !existing });
   });
 
-  // Let someone remove their own anonymous response.
-  app.delete('/api/vote/:token', async (c) => {
+  // Remove this device's own response.
+  const handleDelete = async (c) => {
     if (await limited(c)) return c.json({ error: 'rate_limited' }, 429);
-    await store.delete(c.req.param('token'));
+    const session = await ensureSession(c);
+    const token = session.id || c.req.param('token');
+    if (!token) return c.json({ error: 'no_session' }, 400);
+    await store.delete(token);
     return c.json({ ok: true });
-  });
+  };
+  app.delete('/api/vote', handleDelete);
+  app.delete('/api/vote/:token', handleDelete);
 
   // Invite photos. Real images live in KV (`asset:left` / `asset:right`); this
   // falls back to an inline placeholder so the <img> always resolves.

@@ -51,6 +51,14 @@ export class KvStore {
     return n;
   }
 
+  // Small server-side metadata (e.g. the session-signing secret).
+  async getMeta(key) {
+    return this.kv.get(`meta:${key}`);
+  }
+  async setMeta(key, value) {
+    await this.kv.put(`meta:${key}`, value);
+  }
+
   // Binary asset (e.g. `asset:left`). Uploaded with `wrangler kv key put`.
   async getAsset(key) {
     const { value, metadata } = await this.kv.getWithMetadata(key, { type: 'arrayBuffer' });

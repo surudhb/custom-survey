@@ -135,6 +135,16 @@ npx wrangler secret put ADMIN_KEY
 # paste a value you choose, e.g. a long random string — press Enter
 ```
 
+### `SESSION_SECRET` (recommended)
+
+Signs the device-identity cookie. If you skip it, the Worker generates a random
+one and stores it in KV — but two requests racing on a brand-new deploy could
+generate different secrets, so set it explicitly:
+
+```bash
+node -e "console.log(crypto.randomUUID()+crypto.randomUUID())" | npx wrangler secret put SESSION_SECRET
+```
+
 ### `CONFIG` (to run your real event instead of the committed demo)
 
 The repo's `config.json` is a made-up event. Put your real one in as a secret so
@@ -142,14 +152,14 @@ real names / dates / venues never touch git:
 
 ```bash
 # minify config.real.json to one line and pipe it in:
-node -e "process.stdout.write(JSON.stringify(require('./config.real.json')))" | npx wrangler secret put CONFIG
+python3 -c "import json;print(json.dumps(json.load(open('config.real.json'))))" | npx wrangler secret put CONFIG
 ```
 
 (or `npx wrangler secret put CONFIG` and paste the single-line JSON yourself).
 Leave it unset to serve the demo config. `wrangler secret put` re-deploys the
 Worker on its own, so the new config is live within seconds — no code change.
 
-Either secret can also be set in the dashboard: Worker → **Settings** →
+Any of these secrets can also be set in the dashboard: Worker → **Settings** →
 **Variables and Secrets** → **Add** → type **Secret**.
 
 Your results URL is then:
@@ -190,13 +200,16 @@ edge cache to expire).
 
 ```bash
 BASE=https://custom-survey.<subdomain>.workers.dev
+JAR=/tmp/probe.cookies
 
-curl -s $BASE/api/config | head -c 200            # your config JSON
-curl -s -X POST $BASE/api/vote -H 'content-type: application/json' \
-  -d '{"token":"probe-token-123456","ranking":[<your activities, any order>]}'
-curl -s $BASE/api/summary                          # totalResponses: 1
+curl -s $BASE/api/config | head -c 200                       # your config JSON
+curl -s -c $JAR -b $JAR $BASE/api/session                    # {"token":...,"code":...} + Set-Cookie
+curl -s -c $JAR -b $JAR -X POST $BASE/api/vote \
+  -H 'content-type: application/json' \
+  -d '{"ranking":[<your activities, any order>]}'            # {"ok":true,"created":true}
+curl -s $BASE/api/summary                                    # totalResponses: 1
 curl -s "$BASE/api/results?key=<ADMIN_KEY>" | head -c 200
-curl -s -X DELETE $BASE/api/vote/probe-token-123456
+curl -s -c $JAR -b $JAR -X DELETE $BASE/api/vote             # cleans up the probe
 ```
 
 Then open `$BASE` in a browser and submit a real ranking.
@@ -237,10 +250,14 @@ Worker → **Settings** → **Domains & Routes** → **Add** → **Custom domain
   else falls back to the committed demo `config.json`. So your real event
   details never enter git, and updating the event is a `wrangler secret put`,
   not a deploy.
-- **Nothing sensitive is committed.** `ADMIN_KEY` and `CONFIG` are secrets;
-  `data*`, `admin_key.txt`, `config.real.json`, `.dev.vars`, `photos/` and
-  root-level `*.jpg`/`*.png` are git-ignored. The KV namespace `id` in
-  `wrangler.toml` is a resource handle, not a credential.
+- **Nothing sensitive is committed.** `ADMIN_KEY`, `CONFIG`, `SESSION_SECRET`
+  are secrets; `data*`, `admin_key.txt`, `config.real.json`, `.dev.vars`,
+  `photos/` and root-level `*.jpg`/`*.png` are git-ignored. The KV namespace
+  `id` in `wrangler.toml` is a resource handle, not a credential.
+- **Device identity is a signed `HttpOnly` cookie** (`sid`), set by
+  `GET /api/session` and keyed to votes server-side. Forging one fails the
+  HMAC check. If `SESSION_SECRET` is rotated, everyone's cookie/code is
+  invalidated and they start a fresh entry — only do it before the poll opens.
 - **Rate limiting** uses the native Rate Limiting binding
   (`[[unsafe.bindings]]`, `type = "ratelimit"`). It's free but still flagged
   "unsafe" by wrangler (config shape not finalised) — the warning is expected.

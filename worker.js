@@ -13,6 +13,7 @@
 import { createApp } from './src/app.js';
 import { KvStore } from './src/store-kv.js';
 import { loadConfig } from './src/config.js';
+import { resolveSecret } from './src/session.js';
 import bundledConfig from './config.json';
 
 let app;
@@ -46,11 +47,16 @@ function makeRateLimit(env) {
 export default {
   fetch(request, env, ctx) {
     if (!app) {
+      const store = new KvStore(env.SURVEY_KV);
       app = createApp({
         config: resolveConfig(env),
-        store: new KvStore(env.SURVEY_KV),
+        store,
         getAdminKey: async () => env.ADMIN_KEY || null,
         rateLimit: makeRateLimit(env),
+        // Cookie-signing secret: SESSION_SECRET if set, else a random one
+        // persisted in KV. Set it explicitly to avoid a first-request race:
+        //   npx wrangler secret put SESSION_SECRET
+        getSessionSecret: () => resolveSecret(env.SESSION_SECRET, store, 'session_secret'),
       });
     }
     return app.fetch(request, env, ctx);

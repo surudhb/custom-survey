@@ -5,6 +5,10 @@
 # Gates GET /api/results?key=...  — pick any value for local use.
 ADMIN_KEY=local-dev-admin-key
 
+# Signs the device-identity cookie. Optional (a random one is generated and
+# persisted if unset); set it to keep cookies valid across `wrangler dev` restarts.
+SESSION_SECRET=local-dev-session-secret-change-me
+
 # Optional: your real event config as ONE line of JSON. Omit to use the
 # committed demo config.json. Example:
 # CONFIG={"title":"…","description":"…","dateLabel":"…","activities":["…","…"],"submissionsCloseAt":"2026-09-23T23:59:59","event":{"time":"…","venues":{}}}
