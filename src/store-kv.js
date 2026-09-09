@@ -51,6 +51,19 @@ export class KvStore {
     return n;
   }
 
+  // Delete every response key (leaves asset:* and meta:*). Returns the count.
+  async clear() {
+    let deleted = 0;
+    let cursor;
+    do {
+      const page = await this.kv.list({ prefix: PREFIX, cursor });
+      await Promise.all(page.keys.map((k) => this.kv.delete(k.name)));
+      deleted += page.keys.length;
+      cursor = page.list_complete ? undefined : page.cursor;
+    } while (cursor);
+    return deleted;
+  }
+
   // Small server-side metadata (e.g. the session-signing secret).
   async getMeta(key) {
     return this.kv.get(`meta:${key}`);
