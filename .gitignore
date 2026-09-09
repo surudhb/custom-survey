@@ -14,4 +14,11 @@ admin_key.txt
 config.real.json
 config.local.json
 
+# invite photo source files — uploaded to KV, never committed
+photos/
+/*.jpg
+/*.jpeg
+/*.png
+/*.webp
+
 .DS_Store

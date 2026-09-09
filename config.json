@@ -11,6 +11,7 @@
     "Arcade bar"
   ],
   "submissionsCloseAt": "2027-03-14T23:59:59",
+  "maxResponses": 500,
   "event": {
     "time": "Saturday, March 15, 2027 · 7:30 PM",
     "venues": {

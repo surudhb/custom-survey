@@ -1,11 +1,16 @@
 import fs from 'node:fs';
+import path from 'node:path';
+import { sniffImageType } from './assets.js';
 
 // Flat-file store used by `npm start` (local dev / self-hosting).
 // Same data.json shape as before: { responses: { "<token>": { ranking, updatedAt } } }.
 // A promise chain serializes writes so concurrent submits don't clobber each other.
+// `assetsDir` (optional) is where invite photos live locally — files named
+// left.<ext> / right.<ext> map to the `asset:left` / `asset:right` keys.
 export class FileStore {
-  constructor(file) {
+  constructor(file, { assetsDir } = {}) {
     this.file = file;
+    this.assetsDir = assetsDir || null;
     this._queue = Promise.resolve();
   }
 
@@ -44,5 +49,35 @@ export class FileStore {
 
   async list() {
     return Object.values(this._load().responses);
+  }
+
+  async count() {
+    return Object.keys(this._load().responses).length;
+  }
+
+  // Small server-side metadata, kept alongside responses in data.json.
+  async getMeta(key) {
+    const meta = this._load().meta;
+    return (meta && meta[key]) || null;
+  }
+  async setMeta(key, value) {
+    const data = this._load();
+    data.meta = data.meta || {};
+    data.meta[key] = value;
+    await this._save(data);
+  }
+
+  async getAsset(key) {
+    if (!this.assetsDir) return null;
+    const name = key.replace(/^asset:/, '');
+    for (const ext of ['jpg', 'jpeg', 'png', 'webp', 'gif']) {
+      try {
+        const body = fs.readFileSync(path.join(this.assetsDir, `${name}.${ext}`));
+        return { body, contentType: sniffImageType(body) };
+      } catch {
+        /* try next extension */
+      }
+    }
+    return null;
   }
 }

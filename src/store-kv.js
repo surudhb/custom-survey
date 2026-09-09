@@ -1,3 +1,5 @@
+import { sniffImageType } from './assets.js';
+
 const PREFIX = 'resp:';
 
 // Cloudflare Workers KV store. One key per response ("resp:<token>") so
@@ -35,5 +37,34 @@ export class KvStore {
       cursor = page.list_complete ? undefined : page.cursor;
     } while (cursor);
     return out;
+  }
+
+  // Cheap-ish count (lists keys only, no value reads).
+  async count() {
+    let n = 0;
+    let cursor;
+    do {
+      const page = await this.kv.list({ prefix: PREFIX, cursor });
+      n += page.keys.length;
+      cursor = page.list_complete ? undefined : page.cursor;
+    } while (cursor);
+    return n;
+  }
+
+  // Small server-side metadata (e.g. the session-signing secret).
+  async getMeta(key) {
+    return this.kv.get(`meta:${key}`);
+  }
+  async setMeta(key, value) {
+    await this.kv.put(`meta:${key}`, value);
+  }
+
+  // Binary asset (e.g. `asset:left`). Uploaded with `wrangler kv key put`.
+  async getAsset(key) {
+    const { value, metadata } = await this.kv.getWithMetadata(key, { type: 'arrayBuffer' });
+    if (!value) return null;
+    const contentType =
+      (metadata && metadata.contentType) || sniffImageType(value);
+    return { body: value, contentType };
   }
 }
